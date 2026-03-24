@@ -551,6 +551,18 @@ app.post("/make-server-9e65d886/signup", async (c) => {
       return c.json({ error: "유효한 이메일 주소를 입력해주세요." }, 400);
     }
 
+    // Validate tenant: must exist and must not already have an owner
+    if (tenantSlug) {
+      const tenant = await kv.get(`tenant:${tenantSlug}`);
+      if (!tenant) {
+        return c.json({ error: "존재하지 않는 테넌트입니다." }, 404);
+      }
+      if (tenant.ownerUsername) {
+        console.log(`[SIGNUP] Tenant "${tenantSlug}" already has owner "${tenant.ownerUsername}" — rejecting`);
+        return c.json({ error: "이미 가입된 계정이 있습니다. 회원가입이 불가합니다." }, 409);
+      }
+    }
+
     // Check if username already exists
     console.log('[SIGNUP] Checking if username exists...');
     const existingUser = await kv.get(`user:${username}`);
@@ -605,7 +617,7 @@ app.post("/make-server-9e65d886/signup", async (c) => {
 app.post("/make-server-9e65d886/login", async (c) => {
   try {
     const body = await c.req.json();
-    const { username, password } = body;
+    const { username, password, tenantSlug: requestedTenantSlug } = body;
 
     if (!username || !password) {
       return c.json({ error: "아이디와 비밀번호를 입력해주세요." }, 400);
@@ -615,6 +627,14 @@ app.post("/make-server-9e65d886/login", async (c) => {
     const user = await kv.get(`user:${username}`);
     if (!user || !(await verifyPassword(password, user.password))) {
       return c.json({ error: "아이디 또는 비밀번호가 올바르지 않습니다." }, 401);
+    }
+
+    // Tenant isolation: non-admin users can only login to their own tenant
+    if (!user.isAdmin && requestedTenantSlug) {
+      if (user.tenantSlug && user.tenantSlug !== requestedTenantSlug) {
+        console.log(`[LOGIN] Tenant mismatch: user="${user.tenantSlug}" requested="${requestedTenantSlug}"`);
+        return c.json({ error: "이 페이지에 접속 권한이 없습니다." }, 403);
+      }
     }
 
     return c.json({

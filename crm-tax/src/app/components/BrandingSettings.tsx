@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { toast } from 'sonner';
-import { ArrowLeft, Save } from 'lucide-react';
+import { ArrowLeft, Save, Upload, X, ImageIcon, Maximize2, Mail } from 'lucide-react';
 import { Button } from './ui/button';
 import { useTenant } from '../context/TenantContext';
-import { API_BASE_URL, fetchWithAuth } from '../utils/api';
+import { API_BASE_URL, fetchWithAuth, getAuthHeadersForUpload } from '../utils/api';
 
 interface BrandingSettingsProps {
   onBack: () => void;
@@ -22,8 +22,186 @@ function applyColorVars(primaryColor: string, buttonColor: string): void {
   document.documentElement.style.setProperty('--color-button', buttonColor);
 }
 
+// ── Image Upload Zone ──────────────────────────────────────────────────────────
+
+interface ImageUploadZoneProps {
+  imageType: 'logo' | 'background';
+  currentUrl: string;
+  onUploaded: (url: string) => void;
+  tenantSlug: string;
+}
+
+const LOGO_SPECS = { width: 200, height: 60, maxMB: 2, accept: '.png,.svg,.webp', label: '로고 이미지', hint: '투명 배경 PNG 또는 SVG 권장' };
+const BG_SPECS = { width: 1920, height: 1080, maxMB: 5, accept: '.jpg,.jpeg,.png,.webp', label: '로그인 배경 이미지', hint: '가로형(16:9) 이미지 권장' };
+
+function ImageUploadZone({ imageType, currentUrl, onUploaded, tenantSlug }: ImageUploadZoneProps) {
+  const specs = imageType === 'logo' ? LOGO_SPECS : BG_SPECS;
+  const [isDragging, setIsDragging] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const uploadFile = useCallback(async (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      toast.error('이미지 파일만 업로드할 수 있습니다.');
+      return;
+    }
+    const maxBytes = specs.maxMB * 1024 * 1024;
+    if (file.size > maxBytes) {
+      toast.error(`파일 크기는 ${specs.maxMB}MB 이하이어야 합니다.`);
+      return;
+    }
+
+    setIsUploading(true);
+    setProgress(10);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('imageType', imageType);
+
+      setProgress(40);
+      const response = await fetch(
+        `${API_BASE_URL}/tenant/${tenantSlug}/branding/upload`,
+        { method: 'POST', headers: getAuthHeadersForUpload(), body: formData }
+      );
+      setProgress(80);
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error ?? '업로드 실패');
+      }
+
+      const { url } = await response.json();
+      setProgress(100);
+      onUploaded(url);
+      toast.success('이미지가 업로드되었습니다.');
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : '업로드 실패');
+    } finally {
+      setIsUploading(false);
+      setProgress(0);
+    }
+  }, [imageType, tenantSlug, specs.maxMB, onUploaded]);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file) uploadFile(file);
+  }, [uploadFile]);
+
+  const isLogo = imageType === 'logo';
+
+  return (
+    <div className="space-y-3">
+      {/* Spec badge row */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="inline-flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded font-mono text-muted-foreground">
+          <Maximize2 className="size-3" />
+          권장 {specs.width} × {specs.height}px
+        </span>
+        <span className="inline-flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded font-mono text-muted-foreground">
+          최대 {specs.maxMB}MB
+        </span>
+        <span className="text-xs text-muted-foreground">{specs.hint}</span>
+      </div>
+
+      {/* Drop zone */}
+      <div
+        onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+        onDragLeave={() => setIsDragging(false)}
+        onDrop={handleDrop}
+        className={[
+          'relative rounded-xl border-2 border-dashed transition-all duration-200 overflow-hidden cursor-pointer group',
+          isDragging ? 'border-primary bg-primary/5 scale-[1.01]' : 'border-border hover:border-primary/50 hover:bg-muted/30',
+          isLogo ? 'h-24' : 'h-40',
+        ].join(' ')}
+        onClick={() => !isUploading && inputRef.current?.click()}
+        role="button"
+        aria-label={`${specs.label} 업로드`}
+      >
+        {currentUrl ? (
+          <>
+            <img
+              src={currentUrl}
+              alt={specs.label}
+              className={['w-full h-full', isLogo ? 'object-contain p-3' : 'object-cover'].join(' ')}
+            />
+            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
+              <span className="text-white text-xs font-medium bg-black/50 px-2 py-1 rounded-md flex items-center gap-1">
+                <Upload className="size-3" /> 교체
+              </span>
+            </div>
+          </>
+        ) : (
+          <div className="flex flex-col items-center justify-center h-full gap-2 text-muted-foreground">
+            <div className={['rounded-full bg-muted flex items-center justify-center', isLogo ? 'size-10' : 'size-12'].join(' ')}>
+              <ImageIcon className={isLogo ? 'size-5' : 'size-6'} />
+            </div>
+            <div className="text-center">
+              <p className="text-xs font-medium">클릭하거나 드래그하여 업로드</p>
+              <p className="text-[11px] text-muted-foreground/70 mt-0.5">{specs.accept.replace(/\./g, '').toUpperCase()}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Upload progress overlay */}
+        {isUploading && (
+          <div className="absolute inset-0 bg-background/80 backdrop-blur-sm flex flex-col items-center justify-center gap-2">
+            <div className="w-32 h-1.5 bg-muted rounded-full overflow-hidden">
+              <div
+                className="h-full bg-primary rounded-full transition-all duration-300"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">업로드 중...</p>
+          </div>
+        )}
+      </div>
+
+      {/* URL input (manual fallback) + clear */}
+      <div className="flex gap-2">
+        <input
+          type="url"
+          value={currentUrl}
+          onChange={(e) => onUploaded(e.target.value)}
+          placeholder="또는 이미지 URL 직접 입력"
+          className="flex-1 rounded-lg border bg-background px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary/50 text-muted-foreground"
+        />
+        {currentUrl && (
+          <button
+            type="button"
+            onClick={() => onUploaded('')}
+            className="shrink-0 size-9 flex items-center justify-center rounded-lg border hover:bg-destructive/10 hover:border-destructive/30 transition-colors"
+            aria-label="이미지 삭제"
+          >
+            <X className="size-3.5 text-muted-foreground" />
+          </button>
+        )}
+      </div>
+
+      <input
+        ref={inputRef}
+        type="file"
+        accept={specs.accept}
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) uploadFile(file);
+          e.target.value = '';
+        }}
+      />
+    </div>
+  );
+}
+
+// ── Main Component ─────────────────────────────────────────────────────────────
+
+type SettingsTab = 'branding' | 'dev-request';
+
 export function BrandingSettings({ onBack }: BrandingSettingsProps) {
   const { tenant, tenantSlug } = useTenant();
+  const [activeTab, setActiveTab] = useState<SettingsTab>('branding');
 
   const [form, setForm] = useState<BrandingFormState>({
     tenantName: tenant?.name ?? '',
@@ -95,10 +273,57 @@ export function BrandingSettings({ onBack }: BrandingSettingsProps) {
           <ArrowLeft className="size-4 mr-1" />
           뒤로
         </Button>
-        <h1 className="text-xl font-semibold">브랜딩 설정</h1>
+        <h1 className="text-xl font-semibold">설정</h1>
       </div>
 
-      {/* Two-column layout */}
+      {/* Tab Menu */}
+      <div className="flex gap-1 border-b">
+        <button
+          onClick={() => setActiveTab('branding')}
+          className={`px-4 py-2 text-sm font-medium transition-all border-b-2 -mb-px ${
+            activeTab === 'branding'
+              ? 'border-primary text-primary'
+              : 'border-transparent text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          브랜딩 설정
+        </button>
+        <button
+          onClick={() => setActiveTab('dev-request')}
+          className={`px-4 py-2 text-sm font-medium transition-all border-b-2 -mb-px ${
+            activeTab === 'dev-request'
+              ? 'border-primary text-primary'
+              : 'border-transparent text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          개발 문의
+        </button>
+      </div>
+
+      {/* Dev Request Tab */}
+      {activeTab === 'dev-request' && (
+        <div className="max-w-lg space-y-4">
+          <p className="text-sm text-muted-foreground">
+            기능 추가, 수정 요청 등 개발 관련 문의를 이메일로 보내실 수 있습니다.
+          </p>
+          <Button
+            className="w-full gap-2"
+            onClick={() => {
+              const subject = encodeURIComponent(`[${form.tenantName || tenantSlug}] 개발 요청`);
+              const body = encodeURIComponent(
+                `안녕하세요,\n\n사무소명: ${form.tenantName || ''}\n테넌트 ID: ${tenantSlug || ''}\n\n요청 내용을 아래에 작성해주세요:\n\n`
+              );
+              window.open(`mailto:baeby@argonautai.co.kr?subject=${subject}&body=${body}`);
+            }}
+          >
+            <Mail className="size-4" />
+            개발자에게 요청하기
+          </Button>
+        </div>
+      )}
+
+      {/* Two-column layout (브랜딩 설정 탭) */}
+      {activeTab === 'branding' && (
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
         {/* Left: Edit Form */}
         <div className="space-y-6">
@@ -214,7 +439,7 @@ export function BrandingSettings({ onBack }: BrandingSettingsProps) {
             </div>
           </section>
 
-          {/* Section C: 로고 URL */}
+          {/* Section C: 로고 이미지 */}
           <section
             className="bg-card rounded-xl border p-6 space-y-4"
             aria-labelledby="section-logo"
@@ -222,38 +447,15 @@ export function BrandingSettings({ onBack }: BrandingSettingsProps) {
             <h2 id="section-logo" className="text-sm font-semibold text-foreground">
               로고 이미지
             </h2>
-            <div className="space-y-2">
-              <label
-                htmlFor="logoUrl"
-                className="block text-sm font-medium text-muted-foreground"
-              >
-                로고 URL
-              </label>
-              <input
-                id="logoUrl"
-                type="url"
-                value={form.logoUrl}
-                onChange={(e) => setForm((prev) => ({ ...prev, logoUrl: e.target.value }))}
-                className="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-                placeholder="https://example.com/logo.png"
-              />
-              <p className="text-xs text-muted-foreground">
-                SVG 또는 PNG 권장. 파일 업로드는 추후 지원 예정입니다.
-              </p>
-              {form.logoUrl && (
-                <img
-                  src={form.logoUrl}
-                  alt="로고 미리보기"
-                  className="h-12 w-auto rounded border bg-background object-contain p-1"
-                  onError={(e) => {
-                    (e.currentTarget as HTMLImageElement).style.display = 'none';
-                  }}
-                />
-              )}
-            </div>
+            <ImageUploadZone
+              imageType="logo"
+              currentUrl={form.logoUrl}
+              onUploaded={(url) => setForm((prev) => ({ ...prev, logoUrl: url }))}
+              tenantSlug={tenantSlug ?? ''}
+            />
           </section>
 
-          {/* Section D: 배경 이미지 URL */}
+          {/* Section D: 로그인 배경 이미지 */}
           <section
             className="bg-card rounded-xl border p-6 space-y-4"
             aria-labelledby="section-bg"
@@ -261,35 +463,12 @@ export function BrandingSettings({ onBack }: BrandingSettingsProps) {
             <h2 id="section-bg" className="text-sm font-semibold text-foreground">
               로그인 배경 이미지
             </h2>
-            <div className="space-y-2">
-              <label
-                htmlFor="loginBgUrl"
-                className="block text-sm font-medium text-muted-foreground"
-              >
-                배경 이미지 URL
-              </label>
-              <input
-                id="loginBgUrl"
-                type="url"
-                value={form.loginBgUrl}
-                onChange={(e) => setForm((prev) => ({ ...prev, loginBgUrl: e.target.value }))}
-                className="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-                placeholder="https://example.com/background.jpg"
-              />
-              <p className="text-xs text-muted-foreground">
-                JPG, PNG, WebP 권장. 파일 업로드는 추후 지원 예정입니다.
-              </p>
-              {form.loginBgUrl && (
-                <img
-                  src={form.loginBgUrl}
-                  alt="배경 이미지 썸네일"
-                  className="h-20 w-full rounded border object-cover"
-                  onError={(e) => {
-                    (e.currentTarget as HTMLImageElement).style.display = 'none';
-                  }}
-                />
-              )}
-            </div>
+            <ImageUploadZone
+              imageType="background"
+              currentUrl={form.loginBgUrl}
+              onUploaded={(url) => setForm((prev) => ({ ...prev, loginBgUrl: url }))}
+              tenantSlug={tenantSlug ?? ''}
+            />
           </section>
 
           {/* Save Button */}
@@ -301,6 +480,7 @@ export function BrandingSettings({ onBack }: BrandingSettingsProps) {
             <Save className="size-4" />
             {isSaving ? '저장 중...' : '브랜딩 설정 저장'}
           </Button>
+
         </div>
 
         {/* Right: Login Page Preview */}
@@ -389,6 +569,7 @@ export function BrandingSettings({ onBack }: BrandingSettingsProps) {
           </p>
         </div>
       </div>
+      )}
     </div>
   );
 }

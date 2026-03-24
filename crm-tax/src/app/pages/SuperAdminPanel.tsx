@@ -4,7 +4,7 @@ import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import { Building2, Users, Trash2, Plus, LogOut, Eye, EyeOff, Link } from 'lucide-react';
+import { Building2, Users, Trash2, Plus, LogOut, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { projectId, publicAnonKey } from '/utils/supabase/info';
 
@@ -435,11 +435,11 @@ interface TenantRowProps {
 function TenantRow({ tenant, formatDate, onDeleted }: TenantRowProps) {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isMigrating, setIsMigrating] = useState(false);
+  // 'idle' | 'confirm-migrate' | 'confirm-delete'
+  const [confirmState, setConfirmState] = useState<'idle' | 'confirm-migrate' | 'confirm-delete'>('idle');
 
-  const handleMigrate = async () => {
-    if (!confirm(`"${tenant.name}" 테넌트로 레거시 데이터를 이전하시겠습니까?\n\n기존 고객/상담 데이터가 이 테넌트 아래로 복사됩니다.`)) {
-      return;
-    }
+  const executeMigrate = async () => {
+    setConfirmState('idle');
     setIsMigrating(true);
     try {
       const response = await fetch(`${API_BASE_URL}/admin/migrate`, {
@@ -459,11 +459,8 @@ function TenantRow({ tenant, formatDate, onDeleted }: TenantRowProps) {
     }
   };
 
-  const handleDelete = async () => {
-    if (!confirm(`"${tenant.name}" 테넌트를 삭제하시겠습니까?\n\n이 작업은 되돌릴 수 없습니다.`)) {
-      return;
-    }
-
+  const executeDelete = async () => {
+    setConfirmState('idle');
     setIsDeleting(true);
     try {
       const response = await fetch(`${API_BASE_URL}/admin/tenants/${tenant.slug}`, {
@@ -492,56 +489,87 @@ function TenantRow({ tenant, formatDate, onDeleted }: TenantRowProps) {
   };
 
   return (
-    <tr className="border-b last:border-0 hover:bg-muted/30 transition-colors">
-      <td className="py-3 px-4">
-        <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">{tenant.slug}</code>
-      </td>
-      <td className="py-3 px-4 font-medium">{tenant.name}</td>
-      <td className="py-3 px-4 text-muted-foreground">{tenant.ownerUsername}</td>
-      <td className="py-3 px-4">
-        <div className="flex items-center gap-1.5 text-muted-foreground">
-          <Users className="size-3.5" />
-          {tenant.userCount}
-        </div>
-      </td>
-      <td className="py-3 px-4 text-muted-foreground">{formatDate(tenant.createdAt)}</td>
-      <td className="py-3 px-4">
-        <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="icon"
+    <>
+      <tr className="border-b last:border-0 hover:bg-muted/30 transition-colors">
+        <td className="py-3 px-4">
+          <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">{tenant.slug}</code>
+          <button
+            type="button"
+            className="block mt-1 text-xs text-primary/70 hover:text-primary hover:underline font-mono truncate max-w-[160px]"
             onClick={() => {
               const pageUrl = `${window.location.origin}/${tenant.slug}/`;
               navigator.clipboard.writeText(pageUrl);
-              toast.success('링크가 복사되었습니다', { description: pageUrl });
+              toast.success('링크가 복사되었습니다');
             }}
-            className="size-8"
-            aria-label="페이지 링크 복사"
+            title={`${window.location.origin}/${tenant.slug}/`}
           >
-            <Link className="size-3.5" />
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleMigrate}
-            disabled={isMigrating}
-            className="text-xs h-8"
-          >
-            {isMigrating ? '이전 중...' : '레거시 데이터 이전'}
-          </Button>
-          <Button
-            variant="destructive"
-            size="icon"
-            onClick={handleDelete}
-            disabled={isDeleting}
-            aria-label={`${tenant.name} 테넌트 삭제`}
-            className="size-8"
-          >
-            <Trash2 className="size-3.5" />
-          </Button>
-        </div>
-      </td>
-    </tr>
+            /{tenant.slug}/
+          </button>
+        </td>
+        <td className="py-3 px-4 font-medium">{tenant.name}</td>
+        <td className="py-3 px-4 text-muted-foreground">{tenant.ownerUsername}</td>
+        <td className="py-3 px-4">
+          <div className="flex items-center gap-1.5 text-muted-foreground">
+            <Users className="size-3.5" />
+            {tenant.userCount}
+          </div>
+        </td>
+        <td className="py-3 px-4 text-muted-foreground">{formatDate(tenant.createdAt)}</td>
+        <td className="py-3 px-4">
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setConfirmState('confirm-migrate')}
+              disabled={isMigrating || confirmState !== 'idle'}
+              className="text-xs h-8"
+            >
+              {isMigrating ? '이전 중...' : '레거시 데이터 이전'}
+            </Button>
+            <Button
+              variant="destructive"
+              size="icon"
+              onClick={() => setConfirmState('confirm-delete')}
+              disabled={isDeleting || confirmState !== 'idle'}
+              aria-label={`${tenant.name} 테넌트 삭제`}
+              className="size-8"
+            >
+              <Trash2 className="size-3.5" />
+            </Button>
+          </div>
+        </td>
+      </tr>
+      {confirmState === 'confirm-migrate' && (
+        <tr className="bg-amber-50 dark:bg-amber-950/20 border-b">
+          <td colSpan={6} className="px-4 py-3">
+            <div className="flex items-center justify-between gap-4 text-sm">
+              <span className="text-amber-800 dark:text-amber-300">
+                <strong>{tenant.name}</strong> 테넌트로 레거시 데이터를 이전합니다. 기존 고객/상담 데이터가 복사됩니다.
+              </span>
+              <div className="flex gap-2 shrink-0">
+                <Button size="sm" className="h-7 text-xs" onClick={executeMigrate}>확인</Button>
+                <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setConfirmState('idle')}>취소</Button>
+              </div>
+            </div>
+          </td>
+        </tr>
+      )}
+      {confirmState === 'confirm-delete' && (
+        <tr className="bg-destructive/5 border-b">
+          <td colSpan={6} className="px-4 py-3">
+            <div className="flex items-center justify-between gap-4 text-sm">
+              <span className="text-destructive">
+                <strong>{tenant.name}</strong> 테넌트를 삭제합니다. 이 작업은 되돌릴 수 없습니다.
+              </span>
+              <div className="flex gap-2 shrink-0">
+                <Button size="sm" variant="destructive" className="h-7 text-xs" onClick={executeDelete}>삭제</Button>
+                <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setConfirmState('idle')}>취소</Button>
+              </div>
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
   );
 }
 
