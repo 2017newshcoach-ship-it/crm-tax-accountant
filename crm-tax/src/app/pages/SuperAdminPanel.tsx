@@ -4,7 +4,7 @@ import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import { Building2, Users, Trash2, Plus, LogOut } from 'lucide-react';
+import { Building2, Users, Trash2, Plus, LogOut, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { projectId, publicAnonKey } from '/utils/supabase/info';
 
