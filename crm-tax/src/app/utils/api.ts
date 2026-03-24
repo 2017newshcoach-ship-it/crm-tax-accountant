@@ -7,15 +7,20 @@ export const API_BASE_URL = `https://${projectId}.supabase.co/functions/v1/make-
  */
 export function getAuthHeaders(): Record<string, string> {
   const username = localStorage.getItem('username');
+  const tenantSlug = localStorage.getItem('tenantSlug');
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'Authorization': `Bearer ${publicAnonKey}`,
   };
-  
+
   if (username) {
     headers['X-User-ID'] = username;
   }
-  
+
+  if (tenantSlug) {
+    headers['X-Tenant-ID'] = tenantSlug;
+  }
+
   return headers;
 }
 
@@ -24,14 +29,19 @@ export function getAuthHeaders(): Record<string, string> {
  */
 export function getAuthHeadersForUpload(): Record<string, string> {
   const username = localStorage.getItem('username');
+  const tenantSlug = localStorage.getItem('tenantSlug');
   const headers: Record<string, string> = {
     'Authorization': `Bearer ${publicAnonKey}`,
   };
-  
+
   if (username) {
     headers['X-User-ID'] = username;
   }
-  
+
+  if (tenantSlug) {
+    headers['X-Tenant-ID'] = tenantSlug;
+  }
+
   return headers;
 }
 

@@ -15,6 +15,7 @@ import {
   isValidFileType,
   checkRateLimit,
 } from "./validation.tsx";
+import { getTenantSlug, isSuperAdmin, createTenantRouter } from "./tenant.tsx";
 
 const app = new Hono();
 
@@ -59,8 +60,8 @@ async function initializeStorage() {
 
 // Initialize admin account on startup
 async function initializeAdminAccount() {
-  const adminUsername = 'adminqoquddbs';
-  const adminPassword = 'qoquddbs870628';
+  const adminUsername = Deno.env.get('ADMIN_USERNAME') || 'adminqoquddbs';
+  const adminPassword = Deno.env.get('ADMIN_PASSWORD') || 'qoquddbs870628';
   const adminEmail = 'admin@taxmanagement.local';
   
   const existingAdmin = await kv.get(`user:${adminUsername}`);
@@ -122,7 +123,7 @@ app.use(
   "/*",
   cors({
     origin: "*",
-    allowHeaders: ["Content-Type", "Authorization", "X-User-ID"],
+    allowHeaders: ["Content-Type", "Authorization", "X-User-ID", "X-Tenant-ID", "X-Super-Admin-Key"],
     allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     exposeHeaders: ["Content-Length"],
     maxAge: 600,
@@ -152,11 +153,12 @@ function getUsernameFromAuth(c: any): string | null {
 app.get("/make-server-9e65d886/clients", async (c) => {
   try {
     const userId = getUsernameFromAuth(c);
-    if (!userId) {
-      return c.json({ error: "Unauthorized - User ID required" }, 401);
+    const tenantSlug = getTenantSlug(c);
+    if (!userId || !tenantSlug) {
+      return c.json({ error: "Unauthorized - User ID and Tenant ID required" }, 401);
     }
 
-    const clients = await kv.getByPrefix(`client:${userId}:`);
+    const clients = await kv.getByPrefix(`client:${tenantSlug}:`);
     return c.json({ clients: clients || [] });
   } catch (error) {
     console.error("Error fetching clients:", error);
@@ -168,17 +170,18 @@ app.get("/make-server-9e65d886/clients", async (c) => {
 app.get("/make-server-9e65d886/clients/:id", async (c) => {
   try {
     const userId = getUsernameFromAuth(c);
-    if (!userId) {
-      return c.json({ error: "Unauthorized - User ID required" }, 401);
+    const tenantSlug = getTenantSlug(c);
+    if (!userId || !tenantSlug) {
+      return c.json({ error: "Unauthorized - User ID and Tenant ID required" }, 401);
     }
 
     const id = c.req.param("id");
-    const client = await kv.get(`client:${userId}:${id}`);
-    
+    const client = await kv.get(`client:${tenantSlug}:${id}`);
+
     if (!client) {
       return c.json({ error: "Client not found" }, 404);
     }
-    
+
     return c.json({ client });
   } catch (error) {
     console.error("Error fetching client:", error);
@@ -190,8 +193,9 @@ app.get("/make-server-9e65d886/clients/:id", async (c) => {
 app.post("/make-server-9e65d886/clients", async (c) => {
   try {
     const userId = getUsernameFromAuth(c);
-    if (!userId) {
-      return c.json({ error: "Unauthorized - User ID required" }, 401);
+    const tenantSlug = getTenantSlug(c);
+    if (!userId || !tenantSlug) {
+      return c.json({ error: "Unauthorized - User ID and Tenant ID required" }, 401);
     }
 
     const body = await c.req.json();
@@ -206,6 +210,7 @@ app.post("/make-server-9e65d886/clients", async (c) => {
     const client = {
       id,
       userId,
+      tenantSlug,
       name,
       phone: phone || null,
       email: email || null,
@@ -217,7 +222,7 @@ app.post("/make-server-9e65d886/clients", async (c) => {
       updatedAt: now,
     };
 
-    await kv.set(`client:${userId}:${id}`, client);
+    await kv.set(`client:${tenantSlug}:${id}`, client);
     return c.json({ client });
   } catch (error) {
     console.error("Error creating client:", error);
@@ -229,15 +234,16 @@ app.post("/make-server-9e65d886/clients", async (c) => {
 app.put("/make-server-9e65d886/clients/:id", async (c) => {
   try {
     const userId = getUsernameFromAuth(c);
-    if (!userId) {
-      return c.json({ error: "Unauthorized - User ID required" }, 401);
+    const tenantSlug = getTenantSlug(c);
+    if (!userId || !tenantSlug) {
+      return c.json({ error: "Unauthorized - User ID and Tenant ID required" }, 401);
     }
 
     const id = c.req.param("id");
     const body = await c.req.json();
     const { name, phone, email, businessNumber, industry, memo, isVip } = body;
 
-    const existingClient = await kv.get(`client:${userId}:${id}`);
+    const existingClient = await kv.get(`client:${tenantSlug}:${id}`);
     if (!existingClient) {
       return c.json({ error: "Client not found" }, 404);
     }
@@ -258,7 +264,7 @@ app.put("/make-server-9e65d886/clients/:id", async (c) => {
       updatedAt: new Date().toISOString(),
     };
 
-    await kv.set(`client:${userId}:${id}`, updatedClient);
+    await kv.set(`client:${tenantSlug}:${id}`, updatedClient);
     return c.json({ client: updatedClient });
   } catch (error) {
     console.error("Error updating client:", error);
@@ -270,26 +276,27 @@ app.put("/make-server-9e65d886/clients/:id", async (c) => {
 app.delete("/make-server-9e65d886/clients/:id", async (c) => {
   try {
     const userId = getUsernameFromAuth(c);
-    if (!userId) {
-      return c.json({ error: "Unauthorized - User ID required" }, 401);
+    const tenantSlug = getTenantSlug(c);
+    if (!userId || !tenantSlug) {
+      return c.json({ error: "Unauthorized - User ID and Tenant ID required" }, 401);
     }
 
     const id = c.req.param("id");
-    
-    const existingClient = await kv.get(`client:${userId}:${id}`);
+
+    const existingClient = await kv.get(`client:${tenantSlug}:${id}`);
     if (!existingClient) {
       return c.json({ error: "Client not found" }, 404);
     }
 
-    await kv.del(`client:${userId}:${id}`);
-    
+    await kv.del(`client:${tenantSlug}:${id}`);
+
     // Also delete all consultations for this client
-    const consultations = await kv.getByPrefix(`consultation:${userId}:${id}:`);
-    const deletePromises = consultations.map((c: any) => 
-      kv.del(`consultation:${userId}:${id}:${c.id}`)
+    const consultations = await kv.getByPrefix(`consultation:${tenantSlug}:${id}:`);
+    const deletePromises = consultations.map((cons: any) =>
+      kv.del(`consultation:${tenantSlug}:${id}:${cons.id}`)
     );
     await Promise.all(deletePromises);
-    
+
     return c.json({ success: true });
   } catch (error) {
     console.error("Error deleting client:", error);
@@ -303,12 +310,13 @@ app.delete("/make-server-9e65d886/clients/:id", async (c) => {
 app.get("/make-server-9e65d886/clients/:clientId/consultations", async (c) => {
   try {
     const userId = getUsernameFromAuth(c);
-    if (!userId) {
-      return c.json({ error: "Unauthorized - User ID required" }, 401);
+    const tenantSlug = getTenantSlug(c);
+    if (!userId || !tenantSlug) {
+      return c.json({ error: "Unauthorized - User ID and Tenant ID required" }, 401);
     }
 
     const clientId = c.req.param("clientId");
-    const consultations = await kv.getByPrefix(`consultation:${userId}:${clientId}:`);
+    const consultations = await kv.getByPrefix(`consultation:${tenantSlug}:${clientId}:`);
     return c.json({ consultations: consultations || [] });
   } catch (error) {
     console.error("Error fetching consultations:", error);
@@ -320,11 +328,12 @@ app.get("/make-server-9e65d886/clients/:clientId/consultations", async (c) => {
 app.get("/make-server-9e65d886/consultations", async (c) => {
   try {
     const userId = getUsernameFromAuth(c);
-    if (!userId) {
-      return c.json({ error: "Unauthorized - User ID required" }, 401);
+    const tenantSlug = getTenantSlug(c);
+    if (!userId || !tenantSlug) {
+      return c.json({ error: "Unauthorized - User ID and Tenant ID required" }, 401);
     }
 
-    const consultations = await kv.getByPrefix(`consultation:${userId}:`);
+    const consultations = await kv.getByPrefix(`consultation:${tenantSlug}:`);
     return c.json({ consultations: consultations || [] });
   } catch (error) {
     console.error("Error fetching all consultations:", error);
@@ -336,8 +345,9 @@ app.get("/make-server-9e65d886/consultations", async (c) => {
 app.post("/make-server-9e65d886/clients/:clientId/consultations", async (c) => {
   try {
     const userId = getUsernameFromAuth(c);
-    if (!userId) {
-      return c.json({ error: "Unauthorized - User ID required" }, 401);
+    const tenantSlug = getTenantSlug(c);
+    if (!userId || !tenantSlug) {
+      return c.json({ error: "Unauthorized - User ID and Tenant ID required" }, 401);
     }
 
     const clientId = c.req.param("clientId");
@@ -348,8 +358,8 @@ app.post("/make-server-9e65d886/clients/:clientId/consultations", async (c) => {
       return c.json({ error: "Date is required" }, 400);
     }
 
-    // Verify client exists and belongs to user
-    const client = await kv.get(`client:${userId}:${clientId}`);
+    // Verify client exists within the tenant
+    const client = await kv.get(`client:${tenantSlug}:${clientId}`);
     if (!client) {
       return c.json({ error: "Client not found" }, 404);
     }
@@ -359,6 +369,7 @@ app.post("/make-server-9e65d886/clients/:clientId/consultations", async (c) => {
     const consultation = {
       id,
       userId,
+      tenantSlug,
       clientId,
       date,
       time: time || null,
@@ -370,7 +381,7 @@ app.post("/make-server-9e65d886/clients/:clientId/consultations", async (c) => {
       updatedAt: now,
     };
 
-    await kv.set(`consultation:${userId}:${clientId}:${id}`, consultation);
+    await kv.set(`consultation:${tenantSlug}:${clientId}:${id}`, consultation);
     return c.json({ consultation });
   } catch (error) {
     console.error("Error creating consultation:", error);
@@ -382,8 +393,9 @@ app.post("/make-server-9e65d886/clients/:clientId/consultations", async (c) => {
 app.put("/make-server-9e65d886/clients/:clientId/consultations/:id", async (c) => {
   try {
     const userId = getUsernameFromAuth(c);
-    if (!userId) {
-      return c.json({ error: "Unauthorized - User ID required" }, 401);
+    const tenantSlug = getTenantSlug(c);
+    if (!userId || !tenantSlug) {
+      return c.json({ error: "Unauthorized - User ID and Tenant ID required" }, 401);
     }
 
     const clientId = c.req.param("clientId");
@@ -391,7 +403,7 @@ app.put("/make-server-9e65d886/clients/:clientId/consultations/:id", async (c) =
     const body = await c.req.json();
     const { date, time, content, status, color, isImportant, attachments } = body;
 
-    console.log(`[UPDATE CONSULTATION] Updating consultation ${id} for client ${clientId}, user ${userId}`);
+    console.log(`[UPDATE CONSULTATION] Updating consultation ${id} for client ${clientId}, tenant ${tenantSlug}`);
     console.log(`[UPDATE CONSULTATION] Received data:`, { 
       date, 
       time, 
@@ -403,7 +415,7 @@ app.put("/make-server-9e65d886/clients/:clientId/consultations/:id", async (c) =
       attachments 
     });
 
-    const existingConsultation = await kv.get(`consultation:${userId}:${clientId}:${id}`);
+    const existingConsultation = await kv.get(`consultation:${tenantSlug}:${clientId}:${id}`);
     if (!existingConsultation) {
       return c.json({ error: "Consultation not found" }, 404);
     }
@@ -430,7 +442,7 @@ app.put("/make-server-9e65d886/clients/:clientId/consultations/:id", async (c) =
       attachments: updatedConsultation.attachments
     });
 
-    await kv.set(`consultation:${userId}:${clientId}:${id}`, updatedConsultation);
+    await kv.set(`consultation:${tenantSlug}:${clientId}:${id}`, updatedConsultation);
     
     console.log(`[UPDATE CONSULTATION] Successfully saved consultation`);
     
@@ -445,14 +457,15 @@ app.put("/make-server-9e65d886/clients/:clientId/consultations/:id", async (c) =
 app.patch("/make-server-9e65d886/clients/:clientId/consultations/:id/important", async (c) => {
   try {
     const userId = getUsernameFromAuth(c);
-    if (!userId) {
-      return c.json({ error: "Unauthorized - User ID required" }, 401);
+    const tenantSlug = getTenantSlug(c);
+    if (!userId || !tenantSlug) {
+      return c.json({ error: "Unauthorized - User ID and Tenant ID required" }, 401);
     }
 
     const clientId = c.req.param("clientId");
     const id = c.req.param("id");
 
-    const existingConsultation = await kv.get(`consultation:${userId}:${clientId}:${id}`);
+    const existingConsultation = await kv.get(`consultation:${tenantSlug}:${clientId}:${id}`);
     if (!existingConsultation) {
       return c.json({ error: "Consultation not found" }, 404);
     }
@@ -463,7 +476,7 @@ app.patch("/make-server-9e65d886/clients/:clientId/consultations/:id/important",
       updatedAt: new Date().toISOString(),
     };
 
-    await kv.set(`consultation:${userId}:${clientId}:${id}`, updatedConsultation);
+    await kv.set(`consultation:${tenantSlug}:${clientId}:${id}`, updatedConsultation);
     return c.json({ consultation: updatedConsultation });
   } catch (error) {
     console.error("Error toggling consultation importance:", error);
@@ -475,27 +488,28 @@ app.patch("/make-server-9e65d886/clients/:clientId/consultations/:id/important",
 app.delete("/make-server-9e65d886/clients/:clientId/consultations/:id", async (c) => {
   try {
     const userId = getUsernameFromAuth(c);
-    if (!userId) {
-      return c.json({ error: "Unauthorized - User ID required" }, 401);
+    const tenantSlug = getTenantSlug(c);
+    if (!userId || !tenantSlug) {
+      return c.json({ error: "Unauthorized - User ID and Tenant ID required" }, 401);
     }
 
     const clientId = c.req.param("clientId");
     const id = c.req.param("id");
 
-    const existingConsultation = await kv.get(`consultation:${userId}:${clientId}:${id}`);
+    const existingConsultation = await kv.get(`consultation:${tenantSlug}:${clientId}:${id}`);
     if (!existingConsultation) {
       return c.json({ error: "Consultation not found" }, 404);
     }
 
     // Delete associated attachments from storage
     if (existingConsultation.attachments && existingConsultation.attachments.length > 0) {
-      const filePaths = existingConsultation.attachments.map((att: any) => 
-        `${userId}/${clientId}/${id}/${att.id}`
+      const filePaths = existingConsultation.attachments.map((att: any) =>
+        `${tenantSlug}/${clientId}/${id}/${att.id}`
       );
       await supabase.storage.from(BUCKET_NAME).remove(filePaths);
     }
 
-    await kv.del(`consultation:${userId}:${clientId}:${id}`);
+    await kv.del(`consultation:${tenantSlug}:${clientId}:${id}`);
     return c.json({ success: true });
   } catch (error) {
     console.error("Error deleting consultation:", error);
@@ -593,10 +607,11 @@ app.post("/make-server-9e65d886/login", async (c) => {
       return c.json({ error: "아이디 또는 비밀번호가 올바르지 않습니다." }, 401);
     }
 
-    return c.json({ 
-      success: true, 
+    return c.json({
+      success: true,
       isAdmin: user.isAdmin || false,
       username: user.username,
+      tenantSlug: user.tenantSlug || null,
     });
   } catch (error) {
     console.error("Error during login:", error);
@@ -871,12 +886,18 @@ app.delete("/make-server-9e65d886/admin/delete-user", async (c) => {
 // Upload attachment to consultation
 app.post("/make-server-9e65d886/clients/:clientId/consultations/:consultationId/attachments", async (c) => {
   try {
+    const userId = getUsernameFromAuth(c);
+    const tenantSlug = getTenantSlug(c);
+    if (!userId || !tenantSlug) {
+      return c.json({ error: "Unauthorized - User ID and Tenant ID required" }, 401);
+    }
+
     const clientId = c.req.param("clientId");
     const consultationId = c.req.param("consultationId");
-    
+
     const formData = await c.req.formData();
     const file = formData.get('file') as File;
-    
+
     if (!file) {
       return c.json({ error: "No file provided" }, 400);
     }
@@ -892,7 +913,7 @@ app.post("/make-server-9e65d886/clients/:clientId/consultations/:consultationId/
     // Generate unique file ID
     const fileId = crypto.randomUUID();
     const fileExt = file.name.split('.').pop();
-    const filePath = `${clientId}/${consultationId}/${fileId}.${fileExt}`;
+    const filePath = `${tenantSlug}/${clientId}/${consultationId}/${fileId}.${fileExt}`;
     
     // Upload to Supabase Storage
     const arrayBuffer = await file.arrayBuffer();
@@ -936,12 +957,18 @@ app.post("/make-server-9e65d886/clients/:clientId/consultations/:consultationId/
 // Delete attachment
 app.delete("/make-server-9e65d886/clients/:clientId/consultations/:consultationId/attachments/:attachmentId", async (c) => {
   try {
+    const userId = getUsernameFromAuth(c);
+    const tenantSlug = getTenantSlug(c);
+    if (!userId || !tenantSlug) {
+      return c.json({ error: "Unauthorized - User ID and Tenant ID required" }, 401);
+    }
+
     const clientId = c.req.param("clientId");
     const consultationId = c.req.param("consultationId");
     const attachmentId = c.req.param("attachmentId");
 
     // Get consultation to find file extension
-    const consultation = await kv.get(`consultation:${clientId}:${consultationId}`);
+    const consultation = await kv.get(`consultation:${tenantSlug}:${clientId}:${consultationId}`);
     if (!consultation) {
       return c.json({ error: "Consultation not found" }, 404);
     }
@@ -953,7 +980,7 @@ app.delete("/make-server-9e65d886/clients/:clientId/consultations/:consultationI
 
     // Delete from storage
     const fileExt = attachment.fileName.split('.').pop();
-    const filePath = `${clientId}/${consultationId}/${attachmentId}.${fileExt}`;
+    const filePath = `${tenantSlug}/${clientId}/${consultationId}/${attachmentId}.${fileExt}`;
     const { error: deleteError } = await supabase.storage
       .from(BUCKET_NAME)
       .remove([filePath]);
@@ -971,12 +998,16 @@ app.delete("/make-server-9e65d886/clients/:clientId/consultations/:consultationI
       updatedAt: new Date().toISOString(),
     };
 
-    await kv.set(`consultation:${clientId}:${consultationId}`, updatedConsultation);
+    await kv.set(`consultation:${tenantSlug}:${clientId}:${consultationId}`, updatedConsultation);
     return c.json({ success: true });
   } catch (error) {
     console.error("Error deleting attachment:", error);
     return c.json({ error: "Failed to delete attachment" }, 500);
   }
 });
+
+// Mount tenant routes
+const tenantRouter = createTenantRouter();
+app.route("/", tenantRouter);
 
 Deno.serve(app.fetch);

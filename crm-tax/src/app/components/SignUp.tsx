@@ -6,6 +6,7 @@ import { Button } from './ui/button';
 import { toast } from 'sonner';
 import { FileText, Mail, Check, ArrowLeft, AlertCircle } from 'lucide-react';
 import { projectId, publicAnonKey } from '/utils/supabase/info';
+import { useTenant } from '../context/TenantContext';
 
 const API_BASE_URL = `https://${projectId}.supabase.co/functions/v1/make-server-9e65d886`;
 
@@ -15,6 +16,7 @@ interface SignUpProps {
 }
 
 export function SignUp({ onBack, onSignUpSuccess }: SignUpProps) {
+  const { tenantSlug } = useTenant();
   const [formData, setFormData] = useState({
     username: '',
     password: '',
@@ -169,6 +171,7 @@ export function SignUp({ onBack, onSignUpSuccess }: SignUpProps) {
           username: formData.username,
           password: formData.password,
           email: formData.email,
+          tenantSlug: tenantSlug || undefined,
         }),
       });
 

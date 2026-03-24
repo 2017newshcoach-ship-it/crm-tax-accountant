@@ -16,10 +16,13 @@ import { SearchResults } from './components/SearchResults';
 import { Toaster } from './components/ui/sonner';
 import { toast } from 'sonner';
 import { API_BASE_URL, fetchWithAuth, getAuthHeadersForUpload } from './utils/api';
+import { BrandingSettings } from './components/BrandingSettings';
 import { Button } from './components/ui/button';
-import { LogOut, Calendar, Users, UserPlus, Plus } from 'lucide-react';
+import { LogOut, Calendar, Users, UserPlus, Plus, Settings } from 'lucide-react';
+import { TenantProvider, useTenant } from './context/TenantContext';
+import { SuperAdminPanel } from './pages/SuperAdminPanel';
 
-type View = 
+type View =
   | { type: 'calendar' }
   | { type: 'list' }
   | { type: 'search'; query: string }
@@ -28,11 +31,57 @@ type View =
   | { type: 'editClient'; client: Client }
   | { type: 'newConsultation'; client: Client }
   | { type: 'viewConsultation'; client: Client; consultation: Consultation }
-  | { type: 'editConsultation'; client: Client; consultation: Consultation };
+  | { type: 'editConsultation'; client: Client; consultation: Consultation }
+  | { type: 'settings' };
 
 type AuthView = 'login' | 'signup' | 'forgotPassword' | 'admin';
 
+function AppContent() {
+  const { isLoading: isTenantLoading, error: tenantError } = useTenant();
+
+  if (isTenantLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-muted-foreground text-sm">사무소 정보를 불러오는 중...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (tenantError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center space-y-3 max-w-sm px-4">
+          <p className="text-xl font-semibold">{tenantError}</p>
+          <p className="text-muted-foreground text-sm">URL을 다시 확인해주세요.</p>
+        </div>
+      </div>
+    );
+  }
+
+  return <AppInner />;
+}
+
 export default function App() {
+  const isAdminPath = window.location.pathname.startsWith('/admin');
+  if (isAdminPath) {
+    return (
+      <>
+        <SuperAdminPanel />
+        <Toaster />
+      </>
+    );
+  }
+  return (
+    <TenantProvider>
+      <AppContent />
+    </TenantProvider>
+  );
+}
+
+function AppInner() {
   const [authView, setAuthView] = useState<AuthView>('login');
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     return localStorage.getItem('isAuthenticated') === 'true';
@@ -88,6 +137,7 @@ export default function App() {
 
   const handleLogout = () => {
     localStorage.removeItem('isAuthenticated');
+    // tenantSlug는 유지 — 다음 로그인을 위해
     setIsAuthenticated(false);
     setClients([]);
     setConsultations([]);
@@ -778,6 +828,8 @@ export default function App() {
             onCancel={() => setView({ type: 'detail', client: view.client })}
           />
         );
+      case 'settings':
+        return <BrandingSettings onBack={() => setView({ type: 'calendar' })} />;
       default:
         return null;
     }
@@ -836,10 +888,20 @@ export default function App() {
               />
             </div>
 
+            {/* Settings Button */}
+            <Button
+              variant="ghost"
+              onClick={() => setView({ type: 'settings' })}
+              className="rounded-lg px-3 h-9 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-all"
+            >
+              <Settings className="size-4 mr-1.5" />
+              설정
+            </Button>
+
             {/* Logout Button */}
-            <Button 
-              variant="ghost" 
-              onClick={handleLogout} 
+            <Button
+              variant="ghost"
+              onClick={handleLogout}
               className="rounded-lg px-3 h-9 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-all"
             >
               <LogOut className="size-4 mr-1.5" />
