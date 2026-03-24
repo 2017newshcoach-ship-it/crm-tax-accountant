@@ -242,6 +242,95 @@ export function createTenantRouter(): Hono {
     }
   });
 
+  // POST /make-server-9e65d886/tenant/:slug/branding/upload
+  // Tenant owner only. Uploads a logo or background image to Supabase Storage.
+  // Accepts multipart/form-data with fields: file (Blob) and imageType ("logo" | "background")
+  router.post("/make-server-9e65d886/tenant/:slug/branding/upload", async (c) => {
+    try {
+      const slug = c.req.param("slug");
+      const requestingUser = c.req.header("X-User-ID");
+      const requestingTenant = c.req.header("X-Tenant-ID");
+
+      if (!requestingUser || !requestingTenant) {
+        return c.json({ error: "Unauthorized" }, 401);
+      }
+      if (requestingTenant !== slug) {
+        return c.json({ error: "Forbidden - Tenant mismatch" }, 403);
+      }
+
+      const tenant = await kv.get(`tenant:${slug}`);
+      if (!tenant) return c.json({ error: "Tenant not found" }, 404);
+      if (tenant.ownerUsername !== requestingUser) {
+        return c.json({ error: "Forbidden - Only tenant owner can upload branding images" }, 403);
+      }
+
+      const formData = await c.req.formData();
+      const file = formData.get("file") as File | null;
+      const imageType = formData.get("imageType") as string | null;
+
+      if (!file || !imageType) {
+        return c.json({ error: "file and imageType are required" }, 400);
+      }
+      if (!["logo", "background"].includes(imageType)) {
+        return c.json({ error: "imageType must be 'logo' or 'background'" }, 400);
+      }
+
+      // Validate MIME type
+      const allowed = ["image/png", "image/jpeg", "image/webp", "image/svg+xml", "image/gif"];
+      if (!allowed.includes(file.type)) {
+        return c.json({ error: "허용되지 않는 파일 형식입니다. PNG, JPG, WebP, SVG만 지원합니다." }, 400);
+      }
+
+      // Validate size: logo ≤ 2MB, background ≤ 5MB
+      const maxBytes = imageType === "logo" ? 2 * 1024 * 1024 : 5 * 1024 * 1024;
+      if (file.size > maxBytes) {
+        const maxMB = imageType === "logo" ? 2 : 5;
+        return c.json({ error: `파일 크기는 ${maxMB}MB 이하이어야 합니다.` }, 400);
+      }
+
+      const ext = file.name.split(".").pop() ?? "png";
+      const path = `${slug}/${imageType}.${ext}`;
+      const BUCKET = "branding-9e65d886";
+
+      const supabase = (await import("npm:@supabase/supabase-js@2.48.1")).createClient(
+        Deno.env.get("SUPABASE_URL") ?? "",
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+      );
+
+      // Ensure bucket exists
+      const { data: buckets } = await supabase.storage.listBuckets();
+      if (!buckets?.some((b: any) => b.name === BUCKET)) {
+        await supabase.storage.createBucket(BUCKET, { public: true });
+      }
+
+      const arrayBuffer = await file.arrayBuffer();
+      const { error: uploadError } = await supabase.storage
+        .from(BUCKET)
+        .upload(path, arrayBuffer, { contentType: file.type, upsert: true });
+
+      if (uploadError) {
+        console.error("[UPLOAD] Storage error:", uploadError);
+        return c.json({ error: "이미지 업로드에 실패했습니다." }, 500);
+      }
+
+      const { data: publicData } = supabase.storage.from(BUCKET).getPublicUrl(path);
+      const publicUrl = publicData.publicUrl;
+
+      // Auto-save URL to tenant branding
+      const field = imageType === "logo" ? "logoUrl" : "loginBgUrl";
+      const updatedTenant = {
+        ...tenant,
+        branding: { ...tenant.branding, [field]: publicUrl },
+      };
+      await kv.set(`tenant:${slug}`, updatedTenant);
+
+      return c.json({ url: publicUrl });
+    } catch (error) {
+      console.error("[UPLOAD] Error:", error);
+      return c.json({ error: "업로드 처리 중 오류가 발생했습니다." }, 500);
+    }
+  });
+
   // DELETE /make-server-9e65d886/admin/tenants/:slug
   // Super admin only. Deletes a tenant and clears tenantSlug from associated users.
   router.delete("/make-server-9e65d886/admin/tenants/:slug", async (c) => {
