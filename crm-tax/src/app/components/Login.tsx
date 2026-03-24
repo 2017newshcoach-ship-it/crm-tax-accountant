@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { FileText, UserPlus, KeyRound } from 'lucide-react';
 import { projectId, publicAnonKey } from '/utils/supabase/info';
 import backgroundImage from 'figma:asset/defca6c5e774163963686973981f4d8210cca3e0.png';
+import { useTenant } from '../context/TenantContext';
 
 const API_BASE_URL = `https://${projectId}.supabase.co/functions/v1/make-server-9e65d886`;
 
@@ -21,6 +22,7 @@ export function Login({ onLogin, onAdminLogin, onSignUpClick, onForgotPasswordCl
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const { tenant } = useTenant();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -63,11 +65,14 @@ export function Login({ onLogin, onAdminLogin, onSignUpClick, onForgotPasswordCl
     }
   };
 
+  const bgUrl = tenant?.branding.loginBgUrl ?? backgroundImage;
+  const appName = tenant?.name ?? '세무사 고객 관리';
+
   return (
-    <div 
+    <div
       className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden"
       style={{
-        backgroundImage: `url(${backgroundImage})`,
+        backgroundImage: `url(${bgUrl})`,
         backgroundSize: 'cover',
         backgroundPosition: 'calc(50% + 150px) center',
         backgroundRepeat: 'no-repeat',
@@ -75,12 +80,12 @@ export function Login({ onLogin, onAdminLogin, onSignUpClick, onForgotPasswordCl
     >
       {/* Dark overlay for better readability */}
       <div className="absolute inset-0 bg-black/30" />
-      
+
       {/* Login Card */}
       <Card className="w-full max-w-md relative z-10 shadow-2xl border-0 bg-white/50 backdrop-blur-md">
         <CardHeader className="space-y-1 text-center">
-          <CardTitle className="text-2xl">고경남 세무사 고객 관리</CardTitle>
-          <CardDescription className="text-[rgb(0,0,0)]">
+          <CardTitle className="text-2xl">{appName}</CardTitle>
+          <CardDescription className="text-[var(--color-button,_rgb(0,0,0))]">
             계정으로 로그인하여 상담 내역을 관리하세요
           </CardDescription>
         </CardHeader>
@@ -110,7 +115,11 @@ export function Login({ onLogin, onAdminLogin, onSignUpClick, onForgotPasswordCl
                 autoComplete="current-password"
               />
             </div>
-            <Button type="submit" className="w-full bg-[rgb(0,0,0)]" disabled={isLoading}>
+            <Button
+              type="submit"
+              className="w-full bg-[var(--color-button,_rgb(0,0,0))]"
+              disabled={isLoading}
+            >
               {isLoading ? '로그인 중...' : '로그인'}
             </Button>
           </form>
@@ -118,7 +127,7 @@ export function Login({ onLogin, onAdminLogin, onSignUpClick, onForgotPasswordCl
             <Button
               type="button"
               variant="ghost"
-              className="text-sm text-[rgb(0,0,0)] hover:underline"
+              className="text-sm text-[var(--color-button,_rgb(0,0,0))] hover:underline"
               onClick={onSignUpClick}
             >
               <UserPlus className="size-4 mr-2" />
@@ -129,7 +138,7 @@ export function Login({ onLogin, onAdminLogin, onSignUpClick, onForgotPasswordCl
             <Button
               type="button"
               variant="ghost"
-              className="text-sm text-[rgb(0,0,0)] hover:underline"
+              className="text-sm text-[var(--color-button,_rgb(0,0,0))] hover:underline"
               onClick={onForgotPasswordClick}
             >
               <KeyRound className="size-4 mr-2" />
