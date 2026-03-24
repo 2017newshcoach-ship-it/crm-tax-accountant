@@ -143,6 +143,24 @@ function DashboardScreen({ onLogout }: DashboardScreenProps) {
   const [form, setForm] = useState<NewTenantForm>(EMPTY_FORM);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formErrors, setFormErrors] = useState<Partial<NewTenantForm>>({});
+  const [debugKeys, setDebugKeys] = useState<{ total: number; grouped: Record<string, string[]> } | null>(null);
+  const [isLoadingDebug, setIsLoadingDebug] = useState(false);
+
+  const handleDebugKeys = async () => {
+    setIsLoadingDebug(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/admin/debug/keys`, {
+        headers: getSuperAdminHeaders(),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? 'KV 키 조회 실패');
+      setDebugKeys(data);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'KV 키 조회 실패');
+    } finally {
+      setIsLoadingDebug(false);
+    }
+  };
 
   const fetchTenants = useCallback(async () => {
     setIsLoadingTenants(true);
@@ -361,6 +379,45 @@ function DashboardScreen({ onLogout }: DashboardScreenProps) {
               </div>
             </form>
           </CardContent>
+        </Card>
+
+        {/* KV Store Debug */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-base">KV 스토어 진단</CardTitle>
+                <CardDescription>데이터 마이그레이션 문제 확인용 — 실제 저장된 키 목록을 조회합니다</CardDescription>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleDebugKeys}
+                disabled={isLoadingDebug}
+              >
+                {isLoadingDebug ? '조회 중...' : '키 목록 조회'}
+              </Button>
+            </div>
+          </CardHeader>
+          {debugKeys && (
+            <CardContent>
+              <p className="text-sm text-muted-foreground mb-3">총 {debugKeys.total}개 키</p>
+              <div className="space-y-3">
+                {Object.entries(debugKeys.grouped).map(([prefix, keys]) => (
+                  <div key={prefix}>
+                    <p className="text-xs font-semibold text-muted-foreground mb-1 uppercase tracking-wide">
+                      {prefix} ({keys.length}개)
+                    </p>
+                    <div className="bg-muted rounded-lg p-3 max-h-40 overflow-y-auto">
+                      {keys.map((k) => (
+                        <div key={k} className="text-xs font-mono py-0.5">{k}</div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          )}
         </Card>
       </main>
     </div>

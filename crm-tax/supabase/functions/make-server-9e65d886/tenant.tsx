@@ -131,6 +131,42 @@ export function createTenantRouter(): Hono {
     }
   });
 
+  // GET /make-server-9e65d886/admin/debug/keys
+  // Super admin only. Returns all KV store keys grouped by prefix for diagnostics.
+  router.get("/make-server-9e65d886/admin/debug/keys", async (c) => {
+    try {
+      if (!isSuperAdmin(c)) {
+        return c.json({ error: "Forbidden - Super admin access required" }, 403);
+      }
+
+      const supabase = (await import("npm:@supabase/supabase-js@2.48.1")).createClient(
+        Deno.env.get("SUPABASE_URL") ?? "",
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+      );
+      const { data, error } = await supabase
+        .from("kv_store_9e65d886")
+        .select("key")
+        .order("key");
+
+      if (error) throw new Error(error.message);
+
+      const keys: string[] = data?.map((d: any) => d.key) ?? [];
+
+      // Group by first prefix segment
+      const grouped: Record<string, string[]> = {};
+      for (const key of keys) {
+        const prefix = key.split(":")[0];
+        if (!grouped[prefix]) grouped[prefix] = [];
+        grouped[prefix].push(key);
+      }
+
+      return c.json({ total: keys.length, grouped });
+    } catch (error) {
+      console.error("[DEBUG KEYS] Error:", error);
+      return c.json({ error: "Failed to fetch keys" }, 500);
+    }
+  });
+
   // GET /make-server-9e65d886/admin/tenants
   // Super admin only. Lists all tenants with per-tenant user counts.
   router.get("/make-server-9e65d886/admin/tenants", async (c) => {
@@ -284,9 +320,15 @@ export function createTenantRouter(): Hono {
       // --- Migrate clients ---
       // Legacy key format: client:{userId}:{clientId}
       // New key format:    client:{tenantSlug}:{clientId}
-      const allClientKeys = await kv.getByPrefix("client:");
-      for (const client of allClientKeys) {
-        const clientId = client.id;
+      // Note: extract clientId from the KEY (not value.id) for reliability
+      const allClientKVs = await kv.getKeyValuesByPrefix("client:");
+      for (const { key, value: client } of allClientKVs) {
+        // Skip keys that are already in the new tenant format
+        if (key.startsWith(`client:${targetTenantSlug}:`)) continue;
+
+        // Extract clientId from key: client:{anything}:{clientId}
+        const parts = key.split(":");
+        const clientId = parts.length >= 3 ? parts[parts.length - 1] : (client.id ?? null);
         if (!clientId) continue;
 
         const newKey = `client:${targetTenantSlug}:${clientId}`;
@@ -306,10 +348,16 @@ export function createTenantRouter(): Hono {
       // --- Migrate consultations ---
       // Legacy key format: consultation:{userId}:{clientId}:{consultId}
       // New key format:    consultation:{tenantSlug}:{clientId}:{consultId}
-      const allConsultations = await kv.getByPrefix("consultation:");
-      for (const consultation of allConsultations) {
-        const consultId = consultation.id;
-        const clientId = consultation.clientId;
+      // Note: extract IDs from the KEY for reliability
+      const allConsultationKVs = await kv.getKeyValuesByPrefix("consultation:");
+      for (const { key, value: consultation } of allConsultationKVs) {
+        // Skip keys already in new tenant format
+        if (key.startsWith(`consultation:${targetTenantSlug}:`)) continue;
+
+        // Extract from key: consultation:{anything}:{clientId}:{consultId}
+        const parts = key.split(":");
+        const consultId = parts.length >= 4 ? parts[parts.length - 1] : (consultation.id ?? null);
+        const clientId = parts.length >= 4 ? parts[parts.length - 2] : (consultation.clientId ?? null);
         if (!consultId || !clientId) continue;
 
         const newKey = `consultation:${targetTenantSlug}:${clientId}:${consultId}`;
