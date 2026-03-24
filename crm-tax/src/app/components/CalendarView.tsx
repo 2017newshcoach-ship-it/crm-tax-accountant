@@ -13,7 +13,7 @@ import {
   SelectValue,
 } from './ui/select';
 import { Checkbox } from './ui/checkbox';
-import { Calendar as CalendarIcon, Users, FileText, Crown, ChevronLeft, ChevronRight, Plus, Clock, CheckCircle, XCircle, Edit, Save, X, Star, MoreVertical, Trash2, AlertCircle } from 'lucide-react';
+import { Calendar as CalendarIcon, Users, FileText, Crown, ChevronLeft, ChevronRight, Plus, Clock, CheckCircle, XCircle, Edit, Save, X, Star, MoreVertical, Trash2, AlertCircle, CalendarDays } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,6 +24,7 @@ import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSam
 import { ko } from 'date-fns/locale';
 import { AppointmentDialog } from './AppointmentDialog';
 import { ConsultationDialog } from './ConsultationDialog';
+import { RescheduleDialog } from './RescheduleDialog';
 import { RichTextEditor } from './RichTextEditor';
 
 interface CalendarViewProps {
@@ -75,6 +76,9 @@ export function CalendarView({
   const [consultationDialogOpen, setConsultationDialogOpen] = useState(false);
   const [selectedConsultation, setSelectedConsultation] = useState<Consultation | null>(null);
   const [prefilledClientId, setPrefilledClientId] = useState<string | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [rescheduleTarget, setRescheduleTarget] = useState<Consultation | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const monthStart = startOfMonth(currentMonth);
   const monthEnd = endOfMonth(currentMonth);
@@ -120,6 +124,35 @@ export function CalendarView({
   const handleToday = () => {
     setCurrentMonth(new Date());
     setSelectedDate(new Date());
+  };
+
+  // 예약/상담 삭제
+  const handleDelete = async (consultation: Consultation) => {
+    if (!onCancelAppointment) return;
+    setIsDeleting(true);
+    try {
+      await onCancelAppointment(consultation.id);
+      setDeleteConfirmId(null);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  // 날짜/시간 변경 저장
+  const handleReschedule = async (consultationId: string, date: string, time: string) => {
+    if (!onUpdateConsultation) return;
+    const target = consultations.find((c) => c.id === consultationId);
+    if (!target) return;
+    await onUpdateConsultation(consultationId, {
+      clientId: target.clientId,
+      date,
+      time,
+      content: target.content,
+      isImportant: target.isImportant ?? false,
+      status: target.status,
+      color: target.color,
+      attachments: target.attachments,
+    });
   };
 
   return (
@@ -338,46 +371,101 @@ export function CalendarView({
                     const hasContent = consultation.content && consultation.content.trim().length > 0;
 
                     return (
-                      <Card
-                        key={consultation.id}
-                        className={`cursor-pointer hover:shadow-md transition-all ${
-                          consultation.isImportant ? 'border-yellow-500 bg-yellow-50/50' : ''
-                        } ${isPast && !hasContent ? 'border-red-500 bg-red-50/30' : ''}`}
-                        onClick={() => {
-                          // 모든 상담에 대해 상담 기록 다이얼로그 열기
-                          setSelectedConsultation(consultation);
-                          setPrefilledClientId(client.id);
-                          setConsultationDialogOpen(true);
-                        }}
-                      >
-                        <CardContent className="p-6">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              {consultation.isImportant && (
-                                <Star className="size-4 text-yellow-500 fill-yellow-500" />
-                              )}
-                              {isFuture ? (
-                                <Badge variant="outline" className="gap-1 border-blue-500 text-blue-600 bg-blue-50">
-                                  <Clock className="size-3" />
-                                  예약
-                                </Badge>
-                              ) : isPast && !hasContent ? (
-                                <Badge variant="outline" className="gap-1 border-red-500 text-red-600 bg-red-50">
-                                  <AlertCircle className="size-3" />
-                                  기록 필요
-                                </Badge>
-                              ) : null}
-                              <span className="text-sm font-semibold">{client.name}</span>
-                              {client.isVip && <Crown className="size-4 text-yellow-500" />}
+                      <div key={consultation.id} className="space-y-1">
+                        <Card
+                          className={`cursor-pointer hover:shadow-md transition-all ${
+                            consultation.isImportant ? 'border-yellow-500 bg-yellow-50/50' : ''
+                          } ${isPast && !hasContent ? 'border-red-500 bg-red-50/30' : ''}`}
+                          onClick={() => {
+                            setSelectedConsultation(consultation);
+                            setPrefilledClientId(client.id);
+                            setConsultationDialogOpen(true);
+                          }}
+                        >
+                          <CardContent className="p-4">
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2 flex-wrap min-w-0">
+                                {consultation.isImportant && (
+                                  <Star className="size-4 shrink-0 text-yellow-500 fill-yellow-500" />
+                                )}
+                                {isFuture ? (
+                                  <Badge variant="outline" className="gap-1 border-blue-500 text-blue-600 bg-blue-50">
+                                    <Clock className="size-3" />
+                                    예약
+                                  </Badge>
+                                ) : isPast && !hasContent ? (
+                                  <Badge variant="outline" className="gap-1 border-red-500 text-red-600 bg-red-50">
+                                    <AlertCircle className="size-3" />
+                                    기록 필요
+                                  </Badge>
+                                ) : null}
+                                <span className="text-sm font-semibold truncate">{client.name}</span>
+                                {client.isVip && <Crown className="size-4 shrink-0 text-yellow-500" />}
+                                {consultation.time && (
+                                  <span className="text-xs text-muted-foreground">{consultation.time}</span>
+                                )}
+                              </div>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="size-7 p-0 shrink-0"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <MoreVertical className="size-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                                  <DropdownMenuItem
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setRescheduleTarget(consultation);
+                                    }}
+                                  >
+                                    <CalendarDays className="size-4 mr-2" />
+                                    날짜/시간 변경
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    className="text-destructive focus:text-destructive"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setDeleteConfirmId(consultation.id);
+                                    }}
+                                  >
+                                    <Trash2 className="size-4 mr-2" />
+                                    삭제
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
                             </div>
-                            {consultation.time && (
-                              <span className="text-xs text-muted-foreground">
-                                {consultation.time}
-                              </span>
-                            )}
+                          </CardContent>
+                        </Card>
+
+                        {/* 인라인 삭제 확인 */}
+                        {deleteConfirmId === consultation.id && (
+                          <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-md bg-destructive/10 border border-destructive/30 text-sm">
+                            <span className="text-destructive font-medium">정말 삭제할까요?</span>
+                            <div className="flex gap-2 shrink-0">
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                disabled={isDeleting}
+                                onClick={() => handleDelete(consultation)}
+                              >
+                                {isDeleting ? '삭제 중...' : '삭제'}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => setDeleteConfirmId(null)}
+                              >
+                                취소
+                              </Button>
+                            </div>
                           </div>
-                        </CardContent>
-                      </Card>
+                        )}
+                      </div>
                     );
                   })}
               </div>
@@ -397,6 +485,15 @@ export function CalendarView({
           onNewClient={onNewClient}
         />
       )}
+
+      {/* Reschedule Dialog */}
+      <RescheduleDialog
+        open={!!rescheduleTarget}
+        onOpenChange={(open) => { if (!open) setRescheduleTarget(null); }}
+        consultation={rescheduleTarget}
+        client={rescheduleTarget ? getClientById(rescheduleTarget.clientId) ?? null : null}
+        onSave={handleReschedule}
+      />
 
       {/* Consultation Dialog */}
       {selectedDate && (
