@@ -4,7 +4,7 @@ import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import { Building2, Users, Trash2, Plus, LogOut, Eye, EyeOff } from 'lucide-react';
+import { Building2, Users, Trash2, Plus, LogOut, Eye, EyeOff, Link } from 'lucide-react';
 import { toast } from 'sonner';
 import { projectId, publicAnonKey } from '/utils/supabase/info';
 
@@ -203,7 +203,14 @@ function DashboardScreen({ onLogout }: DashboardScreenProps) {
         throw new Error(data.error ?? '테넌트 생성에 실패했습니다');
       }
 
-      toast.success('테넌트가 생성되었습니다');
+      const pageUrl = `${window.location.origin}/${form.slug}/`;
+      toast.success('테넌트가 생성되었습니다', {
+        description: pageUrl,
+        action: {
+          label: '링크 복사',
+          onClick: () => navigator.clipboard.writeText(pageUrl),
+        },
+      });
       setForm(EMPTY_FORM);
       setFormErrors({});
       await fetchTenants();
@@ -443,6 +450,19 @@ function TenantRow({ tenant, formatDate, onDeleted }: TenantRowProps) {
       <td className="py-3 px-4 text-muted-foreground">{formatDate(tenant.createdAt)}</td>
       <td className="py-3 px-4">
         <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => {
+              const pageUrl = `${window.location.origin}/${tenant.slug}/`;
+              navigator.clipboard.writeText(pageUrl);
+              toast.success('링크가 복사되었습니다', { description: pageUrl });
+            }}
+            className="size-8"
+            aria-label="페이지 링크 복사"
+          >
+            <Link className="size-3.5" />
+          </Button>
           <Button
             variant="outline"
             size="sm"
