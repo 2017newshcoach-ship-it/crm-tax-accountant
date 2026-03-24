@@ -133,6 +133,15 @@ export function CalendarView({
                 {format(currentMonth, 'yyyy년 M월', { locale: ko })}
               </h3>
               <div className="flex items-center gap-2">
+                {selectedDate && (
+                  <Button
+                    size="sm"
+                    onClick={() => setAppointmentDialogOpen(true)}
+                  >
+                    <Clock className="size-4 mr-1" />
+                    예약 등록
+                  </Button>
+                )}
                 <Button variant="outline" size="sm" onClick={handleToday}>
                   오늘
                 </Button>
@@ -280,24 +289,14 @@ export function CalendarView({
                 </CardDescription>
               </div>
               {selectedDate && (
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setConsultationDialogOpen(true)}
-                  >
-                    <Edit className="size-4 mr-1" />
-                    상담 기록
-                  </Button>
-                  <Button
-                    variant="default"
-                    size="sm"
-                    onClick={() => setAppointmentDialogOpen(true)}
-                  >
-                    <Clock className="size-4 mr-1" />
-                    예약 등록
-                  </Button>
-                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setConsultationDialogOpen(true)}
+                >
+                  <Edit className="size-4 mr-1" />
+                  상담 기록
+                </Button>
               )}
             </div>
           </CardHeader>

@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import { toast } from 'sonner';
-import { ArrowLeft, Save, Upload, X, ImageIcon, Maximize2 } from 'lucide-react';
+import { ArrowLeft, Save, Upload, X, ImageIcon, Maximize2, Mail } from 'lucide-react';
 import { Button } from './ui/button';
 import { useTenant } from '../context/TenantContext';
 import { API_BASE_URL, fetchWithAuth, getAuthHeadersForUpload } from '../utils/api';
@@ -197,8 +197,11 @@ function ImageUploadZone({ imageType, currentUrl, onUploaded, tenantSlug }: Imag
 
 // ── Main Component ─────────────────────────────────────────────────────────────
 
+type SettingsTab = 'branding' | 'dev-request';
+
 export function BrandingSettings({ onBack }: BrandingSettingsProps) {
   const { tenant, tenantSlug } = useTenant();
+  const [activeTab, setActiveTab] = useState<SettingsTab>('branding');
 
   const [form, setForm] = useState<BrandingFormState>({
     tenantName: tenant?.name ?? '',
@@ -270,10 +273,57 @@ export function BrandingSettings({ onBack }: BrandingSettingsProps) {
           <ArrowLeft className="size-4 mr-1" />
           뒤로
         </Button>
-        <h1 className="text-xl font-semibold">브랜딩 설정</h1>
+        <h1 className="text-xl font-semibold">설정</h1>
       </div>
 
-      {/* Two-column layout */}
+      {/* Tab Menu */}
+      <div className="flex gap-1 border-b">
+        <button
+          onClick={() => setActiveTab('branding')}
+          className={`px-4 py-2 text-sm font-medium transition-all border-b-2 -mb-px ${
+            activeTab === 'branding'
+              ? 'border-primary text-primary'
+              : 'border-transparent text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          브랜딩 설정
+        </button>
+        <button
+          onClick={() => setActiveTab('dev-request')}
+          className={`px-4 py-2 text-sm font-medium transition-all border-b-2 -mb-px ${
+            activeTab === 'dev-request'
+              ? 'border-primary text-primary'
+              : 'border-transparent text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          개발 문의
+        </button>
+      </div>
+
+      {/* Dev Request Tab */}
+      {activeTab === 'dev-request' && (
+        <div className="max-w-lg space-y-4">
+          <p className="text-sm text-muted-foreground">
+            기능 추가, 수정 요청 등 개발 관련 문의를 이메일로 보내실 수 있습니다.
+          </p>
+          <Button
+            className="w-full gap-2"
+            onClick={() => {
+              const subject = encodeURIComponent(`[${form.tenantName || tenantSlug}] 개발 요청`);
+              const body = encodeURIComponent(
+                `안녕하세요,\n\n사무소명: ${form.tenantName || ''}\n테넌트 ID: ${tenantSlug || ''}\n\n요청 내용을 아래에 작성해주세요:\n\n`
+              );
+              window.open(`mailto:baeby@argonautai.co.kr?subject=${subject}&body=${body}`);
+            }}
+          >
+            <Mail className="size-4" />
+            개발자에게 요청하기
+          </Button>
+        </div>
+      )}
+
+      {/* Two-column layout (브랜딩 설정 탭) */}
+      {activeTab === 'branding' && (
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
         {/* Left: Edit Form */}
         <div className="space-y-6">
@@ -430,6 +480,7 @@ export function BrandingSettings({ onBack }: BrandingSettingsProps) {
             <Save className="size-4" />
             {isSaving ? '저장 중...' : '브랜딩 설정 저장'}
           </Button>
+
         </div>
 
         {/* Right: Login Page Preview */}
@@ -518,6 +569,7 @@ export function BrandingSettings({ onBack }: BrandingSettingsProps) {
           </p>
         </div>
       </div>
+      )}
     </div>
   );
 }
