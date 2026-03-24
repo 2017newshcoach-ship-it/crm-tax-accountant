@@ -22,7 +22,7 @@ export function Login({ onLogin, onAdminLogin, onSignUpClick, onForgotPasswordCl
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const { tenant } = useTenant();
+  const { tenant, tenantSlug } = useTenant();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,6 +38,7 @@ export function Login({ onLogin, onAdminLogin, onSignUpClick, onForgotPasswordCl
         body: JSON.stringify({
           username,
           password,
+          tenantSlug: tenantSlug || undefined,
         }),
       });
 

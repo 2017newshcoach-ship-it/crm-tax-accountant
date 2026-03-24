@@ -16,7 +16,7 @@ interface SignUpProps {
 }
 
 export function SignUp({ onBack, onSignUpSuccess }: SignUpProps) {
-  const { tenantSlug } = useTenant();
+  const { tenantSlug, tenant } = useTenant();
   const [formData, setFormData] = useState({
     username: '',
     password: '',
@@ -193,6 +193,34 @@ export function SignUp({ onBack, onSignUpSuccess }: SignUpProps) {
       setIsLoading(false);
     }
   };
+
+  // If the tenant already has an owner, block signup
+  if (tenantSlug && tenant?.ownerUsername) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="space-y-1 text-center">
+            <div className="flex justify-center mb-4">
+              <div className="bg-destructive/10 p-3 rounded-full">
+                <AlertCircle className="size-8 text-destructive" />
+              </div>
+            </div>
+            <CardTitle className="text-2xl">회원가입 불가</CardTitle>
+            <CardDescription>
+              이 페이지는 이미 사용 중인 계정이 있습니다.<br />
+              오너 계정으로 로그인해주세요.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex justify-center">
+            <Button variant="outline" onClick={onBack}>
+              <ArrowLeft className="size-4 mr-2" />
+              로그인으로 돌아가기
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
