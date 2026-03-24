@@ -413,7 +413,7 @@ function AppInner() {
     status?: 'scheduled';
     color?: string;
     attachments?: any[];
-  }) => {
+  }): Promise<boolean> => {
     try {
       console.log('[handleUpdateConsultation] Updating consultation:', consultationId);
       console.log('[handleUpdateConsultation] Attachments:', consultationData.attachments);
@@ -492,14 +492,16 @@ function AppInner() {
 
       const data = await response.json();
       console.log('[handleUpdateConsultation] Consultation updated:', data.consultation);
-      
+
       setConsultations((prev) =>
         prev.map((c) => (c.id === data.consultation.id ? data.consultation : c))
       );
       toast.success('상담 기록이 수정되었습니다.');
+      return true;
     } catch (error) {
       console.error('Error updating consultation:', error);
       toast.error('상담 기록 수정에 실패했습니다.');
+      return false;
     }
   };
 
