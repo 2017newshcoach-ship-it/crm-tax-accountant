@@ -55,7 +55,7 @@ interface CalendarViewProps {
     status?: 'scheduled';
     color?: string;
     attachments?: any[];
-  }) => Promise<void>;
+  }) => Promise<boolean | void>;
   onCancelAppointment?: (consultationId: string) => Promise<void>;
   onNewClient: () => void;
 }
@@ -143,7 +143,7 @@ export function CalendarView({
     if (!onUpdateConsultation) return;
     const target = consultations.find((c) => c.id === consultationId);
     if (!target) return;
-    await onUpdateConsultation(consultationId, {
+    const success = await onUpdateConsultation(consultationId, {
       clientId: target.clientId,
       date,
       time,
@@ -153,6 +153,12 @@ export function CalendarView({
       color: target.color,
       attachments: target.attachments,
     });
+    // 성공 시 새 날짜로 캘린더 이동
+    if (success !== false) {
+      const newDate = new Date(date + 'T12:00:00');
+      setCurrentMonth(newDate);
+      setSelectedDate(newDate);
+    }
   };
 
   return (
