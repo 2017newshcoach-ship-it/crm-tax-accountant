@@ -6,6 +6,8 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
 import { Checkbox } from './ui/checkbox';
 import { RichTextEditor } from './RichTextEditor';
 import { Client, Consultation } from '../types/client';
@@ -82,6 +84,7 @@ export function ConsultationDialog({
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [date, setDate] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [clientSearchOpen, setClientSearchOpen] = useState(false);
 
   // 자동저장을 위한 참조
   const autoSaveRef = useRef<NodeJS.Timeout | null>(null);
@@ -272,19 +275,48 @@ export function ConsultationDialog({
                     {sortedClients.find(c => c.id === clientId)?.isVip && ' 👑'}
                   </span>
                 ) : (
-                  // 신규 상담 작성: 고객 선택 가능
-                  <Select value={clientId} onValueChange={setClientId} required>
-                    <SelectTrigger className="h-auto w-auto min-w-[60px] border-0 bg-transparent shadow-none font-bold text-xl p-0 gap-1 focus:ring-0 text-foreground [&>svg]:size-4">
-                      <SelectValue placeholder="선택" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {sortedClients.map((client) => (
-                        <SelectItem key={client.id} value={client.id}>
-                          {client.name}{client.isVip && ' 👑'}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  // 신규 상담 작성: 고객 검색 선택
+                  <Popover open={clientSearchOpen} onOpenChange={setClientSearchOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        role="combobox"
+                        aria-expanded={clientSearchOpen}
+                        className="h-auto w-auto min-w-[60px] border-0 bg-transparent shadow-none font-bold text-xl p-0 gap-1 hover:bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 text-foreground"
+                      >
+                        {clientId
+                          ? <>
+                              {sortedClients.find(c => c.id === clientId)?.name}
+                              {sortedClients.find(c => c.id === clientId)?.isVip && ' 👑'}
+                            </>
+                          : <span className="text-muted-foreground font-normal">선택</span>
+                        }
+                        <ChevronDown className="size-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-56 p-0" align="start">
+                      <Command>
+                        <CommandInput placeholder="고객 이름 검색..." />
+                        <CommandList>
+                          <CommandEmpty>검색 결과가 없습니다</CommandEmpty>
+                          <CommandGroup>
+                            {sortedClients.map((client) => (
+                              <CommandItem
+                                key={client.id}
+                                value={client.name}
+                                onSelect={() => {
+                                  setClientId(client.id);
+                                  setClientSearchOpen(false);
+                                }}
+                              >
+                                {client.name}{client.isVip && ' 👑'}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
                 )}
                 <span>상담 기록 작성</span>
               </DialogTitle>
