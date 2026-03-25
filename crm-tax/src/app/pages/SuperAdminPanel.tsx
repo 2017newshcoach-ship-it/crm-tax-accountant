@@ -5,7 +5,6 @@ import { Badge } from '../components/ui/badge';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Building2, Users, Trash2, Plus, LogOut, Eye, EyeOff } from 'lucide-react';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { toast } from 'sonner';
 import { projectId, publicAnonKey } from '/utils/supabase/info';
 
@@ -436,12 +435,7 @@ interface TenantRowProps {
 function TenantRow({ tenant, formatDate, onDeleted }: TenantRowProps) {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isMigrating, setIsMigrating] = useState(false);
-  const [isAssigningOwner, setIsAssigningOwner] = useState(false);
-  const [assignOwnerUsername, setAssignOwnerUsername] = useState('');
-  const [unassignedUsers, setUnassignedUsers] = useState<{ username: string; email: string }[]>([]);
-  const [isLoadingUsers, setIsLoadingUsers] = useState(false);
-  // 'idle' | 'confirm-migrate' | 'confirm-delete' | 'assign-owner'
-  const [confirmState, setConfirmState] = useState<'idle' | 'confirm-migrate' | 'confirm-delete' | 'assign-owner'>('idle');
+  const [confirmState, setConfirmState] = useState<'idle' | 'confirm-migrate' | 'confirm-delete'>('idle');
 
   const executeMigrate = async () => {
     setConfirmState('idle');
@@ -463,28 +457,6 @@ function TenantRow({ tenant, formatDate, onDeleted }: TenantRowProps) {
       toast.error(err instanceof Error ? err.message : '마이그레이션 실패');
     } finally {
       setIsMigrating(false);
-    }
-  };
-
-  const executeAssignOwner = async () => {
-    if (!assignOwnerUsername.trim()) return;
-    setIsAssigningOwner(true);
-    setConfirmState('idle');
-    try {
-      const response = await fetch(`${API_BASE_URL}/admin/tenants/${tenant.slug}/assign-owner`, {
-        method: 'POST',
-        headers: getSuperAdminHeaders(),
-        body: JSON.stringify({ username: assignOwnerUsername.trim() }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error ?? '오너 지정 실패');
-      toast.success(`오너 지정 완료 — "${assignOwnerUsername.trim()}" → "${tenant.name}"`);
-      setAssignOwnerUsername('');
-      onDeleted();
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : '오너 지정 실패');
-    } finally {
-      setIsAssigningOwner(false);
     }
   };
 
@@ -551,32 +523,6 @@ function TenantRow({ tenant, formatDate, onDeleted }: TenantRowProps) {
         <td className="py-3 px-4 text-muted-foreground">{formatDate(tenant.createdAt)}</td>
         <td className="py-3 px-4">
           <div className="flex items-center gap-2">
-            {!tenant.ownerUsername && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={async () => {
-                  setIsLoadingUsers(true);
-                  setAssignOwnerUsername('');
-                  setConfirmState('assign-owner');
-                  try {
-                    const res = await fetch(`${API_BASE_URL}/admin/users/unassigned`, {
-                      headers: getSuperAdminHeaders(),
-                    });
-                    const data = await res.json();
-                    setUnassignedUsers(data.users ?? []);
-                  } catch {
-                    setUnassignedUsers([]);
-                  } finally {
-                    setIsLoadingUsers(false);
-                  }
-                }}
-                disabled={isAssigningOwner || confirmState !== 'idle'}
-                className="text-xs h-8 border-amber-400 text-amber-700 hover:bg-amber-50"
-              >
-                {isAssigningOwner ? '지정 중...' : '오너 지정'}
-              </Button>
-            )}
             <Button
               variant="outline"
               size="sm"
@@ -599,64 +545,6 @@ function TenantRow({ tenant, formatDate, onDeleted }: TenantRowProps) {
           </div>
         </td>
       </tr>
-      {confirmState === 'assign-owner' && (
-        <tr className="bg-amber-50 dark:bg-amber-950/20 border-b">
-          <td colSpan={6} className="px-4 py-3">
-            <div className="flex items-center justify-between gap-4 text-sm">
-              <div className="flex items-center gap-3 flex-1">
-                <span className="text-amber-800 dark:text-amber-300 shrink-0">
-                  오너로 지정할 계정:
-                </span>
-                <Select
-                  value={assignOwnerUsername}
-                  onValueChange={setAssignOwnerUsername}
-                  disabled={isLoadingUsers}
-                >
-                  <SelectTrigger className="h-7 text-xs max-w-64">
-                    <SelectValue placeholder={
-                      isLoadingUsers
-                        ? '불러오는 중...'
-                        : unassignedUsers.length === 0
-                          ? '미배정 유저 없음'
-                          : '계정 선택'
-                    } />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {unassignedUsers.length === 0 ? (
-                      <SelectItem value="__none__" disabled>미배정 유저 없음</SelectItem>
-                    ) : (
-                      unassignedUsers.map((u) => (
-                        <SelectItem key={u.username} value={u.username}>
-                          {u.username}
-                          {u.email && <span className="text-muted-foreground ml-1">({u.email})</span>}
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex gap-2 shrink-0">
-                <Button
-                  size="sm"
-                  className="h-7 text-xs"
-                  onClick={executeAssignOwner}
-                  disabled={!assignOwnerUsername || assignOwnerUsername === '__none__'}
-                >
-                  확인
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 text-xs"
-                  onClick={() => { setConfirmState('idle'); setAssignOwnerUsername(''); setUnassignedUsers([]); }}
-                >
-                  취소
-                </Button>
-              </div>
-            </div>
-          </td>
-        </tr>
-      )}
       {confirmState === 'confirm-migrate' && (
         <tr className="bg-amber-50 dark:bg-amber-950/20 border-b">
           <td colSpan={6} className="px-4 py-3">
