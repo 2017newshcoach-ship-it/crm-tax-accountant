@@ -638,6 +638,49 @@ test.describe('REQ-ISO-007: /admin/users endpoint access control', () => {
 });
 
 // ---------------------------------------------------------------------------
+// REQ-ISO-009: 다른 테넌트 URL로 이동 시 기존 세션이 자동으로 초기화되어야 한다
+// ---------------------------------------------------------------------------
+
+test.describe('REQ-ISO-009: cross-tenant URL navigation clears stale session', () => {
+  test('REQ-ISO-009a: tenant-a session is cleared when navigating to tenant-b URL', async ({ page }) => {
+    // 테넌트-a로 로그인된 상태
+    await loginAs(page, USER_A);
+    await mockTenantConfig(page, TENANT_B, 'Beta Office');
+
+    // 테넌트-b URL로 직접 이동
+    await page.goto(`${BASE_URL}/${TENANT_B}/`);
+    await page.waitForTimeout(500);
+
+    // isAuthenticated가 false가 되어 로그인 페이지가 표시되어야 함
+    const isAuthenticated = await page.evaluate(() => localStorage.getItem('isAuthenticated'));
+    expect(isAuthenticated).not.toBe('true');
+
+    // 로그인 폼이 표시되어야 함
+    const loginForm = page.locator('input[type="password"]');
+    await expect(loginForm).toBeVisible({ timeout: 3000 });
+  });
+
+  test('REQ-ISO-009b: same-tenant navigation does not clear session', async ({ page }) => {
+    await loginAs(page, USER_A);
+    await mockTenantConfig(page, TENANT_A, 'Alpha Office');
+
+    await page.route('**/make-server-9e65d886/clients', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ clients: [] }) });
+    });
+    await page.route('**/make-server-9e65d886/consultations', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ consultations: [] }) });
+    });
+
+    // 같은 테넌트 URL로 이동 — 세션 유지되어야 함
+    await page.goto(`${BASE_URL}/${TENANT_A}/`);
+    await page.waitForTimeout(500);
+
+    const isAuthenticated = await page.evaluate(() => localStorage.getItem('isAuthenticated'));
+    expect(isAuthenticated).toBe('true');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // REQ-ISO-008: /admin/delete-user has no auth guard (known gap — document it)
 // ---------------------------------------------------------------------------
 
