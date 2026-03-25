@@ -265,16 +265,14 @@ export function ConsultationDialog({
           <div className="flex items-start justify-between gap-4">
             <div className="flex-1">
               <DialogTitle className="flex items-center gap-2">
-                {selectedConsultation?.status === 'scheduled' ? (
-                  // 예약 상담인 경우 고객명 고정 표시
-                  <>
-                    <span className="font-bold text-xl">
-                      {sortedClients.find(c => c.id === clientId)?.name}
-                      {sortedClients.find(c => c.id === clientId)?.isVip && ' 👑'}
-                    </span>
-                  </>
+                {selectedConsultation ? (
+                  // 기존 상담 수정: 고객 변경 불가 (삭제 후 새 예약 등록해야 함)
+                  <span className="font-bold text-xl">
+                    {sortedClients.find(c => c.id === clientId)?.name}
+                    {sortedClients.find(c => c.id === clientId)?.isVip && ' 👑'}
+                  </span>
                 ) : (
-                  // 일반 상담인 경우 고객 선택 가능
+                  // 신규 상담 작성: 고객 선택 가능
                   <Select value={clientId} onValueChange={setClientId} required>
                     <SelectTrigger className="h-auto w-auto min-w-[60px] border-0 bg-transparent shadow-none font-bold text-xl p-0 gap-1 focus:ring-0 text-foreground [&>svg]:size-4">
                       <SelectValue placeholder="선택" />
@@ -291,8 +289,8 @@ export function ConsultationDialog({
                 <span>상담 기록 작성</span>
               </DialogTitle>
               <DialogDescription className="flex items-center gap-2 mt-1.5 flex-wrap">
-                {/* 예약 상담인 경우 날짜 선택 드롭다운 */}
-                {selectedConsultation?.status === 'scheduled' ? (
+                {/* 수정 모드: 예약/일반 상담 모두 날짜 수정 가능 / 신규 작성: 선택 날짜 고정 표시 */}
+                {selectedConsultation ? (
                   <Input
                     type="date"
                     value={date}
