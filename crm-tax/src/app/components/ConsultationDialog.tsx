@@ -249,13 +249,13 @@ export function ConsultationDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-[95vw] lg:max-w-[1400px] h-[90vh] overflow-hidden flex flex-col">
         {/* 저장 버튼 - X 버튼 왼쪽에 절대 위치 */}
-        <Button 
-          onClick={handleSubmit} 
+        <Button
+          onClick={handleSubmit}
           disabled={isSubmitting || !clientId || !time}
           variant="ghost"
           size="icon"
           className="absolute top-6 right-[60px] h-8 w-8 rounded-xl opacity-70 ring-offset-background transition-all hover:opacity-100 hover:bg-secondary/80 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none disabled:opacity-30 p-2"
-          title="저장"
+          title={!time ? '시간을 선택해야 저장할 수 있습니다' : !clientId ? '고객을 선택해야 저장할 수 있습니다' : '저장'}
         >
           <Save className="size-4" />
           <span className="sr-only">저장</span>
@@ -297,16 +297,16 @@ export function ConsultationDialog({
                     type="date"
                     value={date}
                     onChange={(e) => setDate(e.target.value)}
-                    className="h-auto w-auto border-0 bg-transparent shadow-none text-sm p-0 focus:ring-0 text-foreground cursor-pointer"
+                    className="h-auto w-auto border-0 border-b border-dashed border-muted-foreground/50 bg-transparent shadow-none text-sm p-0 pb-0.5 focus:ring-0 focus:border-foreground text-foreground cursor-pointer hover:border-foreground transition-colors rounded-none"
                   />
                 ) : (
                   format(selectedDate, 'yyyy년 M월 d일 (EEE)', { locale: ko })
                 )}
                 <span>•</span>
-                
+
                 {/* 시간 선택 - 항상 수정 가능 */}
                 <Select value={time} onValueChange={setTime} required>
-                  <SelectTrigger className="h-auto w-auto min-w-[60px] border-0 bg-transparent shadow-none text-sm p-0 gap-1 focus:ring-0 text-foreground [&>svg]:size-3">
+                  <SelectTrigger className="h-auto w-auto min-w-[60px] border-0 border-b border-dashed border-muted-foreground/50 bg-transparent shadow-none text-sm p-0 pb-0.5 gap-1 focus:ring-0 text-foreground [&>svg]:size-3 hover:border-foreground transition-colors rounded-none">
                     <SelectValue placeholder="시간" />
                   </SelectTrigger>
                   <SelectContent>

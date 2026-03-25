@@ -51,6 +51,10 @@ export function Login({ onLogin, onAdminLogin, onSignUpClick, onForgotPasswordCl
       localStorage.setItem('isAuthenticated', 'true');
       localStorage.setItem('username', data.username);
       localStorage.setItem('isAdmin', data.isAdmin ? 'true' : 'false');
+      // 서버가 반환한 tenantSlug로 덮어써서 스푸핑 방지
+      if (data.tenantSlug) {
+        localStorage.setItem('tenantSlug', data.tenantSlug);
+      }
       
       toast.success('로그인되었습니다.');
       
