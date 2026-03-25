@@ -65,7 +65,19 @@ function AppContent() {
 }
 
 export default function App() {
-  const isAdminPath = window.location.pathname.startsWith('/admin');
+  const path = window.location.pathname;
+
+  // 루트 URL 접근 시 /admin/으로 리디렉트 + stale 세션 클리어
+  if (path === '/' || path === '') {
+    localStorage.removeItem('isAuthenticated');
+    localStorage.removeItem('username');
+    localStorage.removeItem('isAdmin');
+    localStorage.removeItem('tenantSlug');
+    window.location.replace('/admin/');
+    return null;
+  }
+
+  const isAdminPath = path.startsWith('/admin');
   if (isAdminPath) {
     return (
       <>
