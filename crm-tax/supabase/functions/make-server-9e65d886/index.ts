@@ -649,11 +649,11 @@ app.post("/make-server-9e65d886/login", async (c) => {
       return c.json({ error: "아이디 또는 비밀번호가 올바르지 않습니다." }, 401);
     }
 
-    // Tenant isolation: non-admin users can only login to their own tenant
-    if (!user.isAdmin && requestedTenantSlug) {
-      // user.tenantSlug가 null이거나 요청 테넌트와 다르면 거부
-      if (!user.tenantSlug || user.tenantSlug !== requestedTenantSlug) {
-        console.log(`[LOGIN] Tenant mismatch or unassigned: user="${user.tenantSlug}" requested="${requestedTenantSlug}"`);
+    // Tenant isolation: non-admin users MUST provide tenantSlug and it must match their assigned tenant
+    // requestedTenantSlug가 없거나, user.tenantSlug가 없거나, 불일치하면 모두 거부
+    if (!user.isAdmin) {
+      if (!requestedTenantSlug || !user.tenantSlug || user.tenantSlug !== requestedTenantSlug) {
+        console.log(`[LOGIN] Tenant check failed: user="${user.tenantSlug}" requested="${requestedTenantSlug ?? 'null'}"`);
         return c.json({ error: "이 페이지에 접속 권한이 없습니다." }, 403);
       }
     }

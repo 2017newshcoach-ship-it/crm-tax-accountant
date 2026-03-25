@@ -94,9 +94,12 @@ function AppInner() {
     const storedSlug = localStorage.getItem('tenantSlug');
     const ignoredSlugs = new Set(['admin']);
 
-    if (urlSlug && !ignoredSlugs.has(urlSlug) && storedSlug && urlSlug !== storedSlug) {
+    // 테넌트 URL 접근 시: storedSlug가 없거나 URL과 다르면 세션 초기화
+    // (관리자 계정도 tenantSlug가 없으므로, 테넌트 URL에서는 세션 무효화)
+    if (urlSlug && !ignoredSlugs.has(urlSlug) && (!storedSlug || urlSlug !== storedSlug)) {
       localStorage.removeItem('isAuthenticated');
       localStorage.removeItem('username');
+      localStorage.removeItem('isAdmin');
       return false;
     }
 

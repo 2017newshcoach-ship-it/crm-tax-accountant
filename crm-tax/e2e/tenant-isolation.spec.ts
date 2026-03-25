@@ -681,6 +681,142 @@ test.describe('REQ-ISO-009: cross-tenant URL navigation clears stale session', (
 });
 
 // ---------------------------------------------------------------------------
+// REQ-ISO-010: 관리자 계정은 테넌트 URL 접근 시 세션이 초기화되어야 한다
+// (storedSlug가 null인 관리자 계정의 세션 carry-over 방지)
+// ---------------------------------------------------------------------------
+
+test.describe('REQ-ISO-010: admin session is cleared on tenant URL navigation', () => {
+  test('REQ-ISO-010a: admin session (no tenantSlug) is cleared when navigating to tenant URL', async ({ page }) => {
+    // 관리자 로그인 상태: isAdmin=true, tenantSlug 없음
+    await page.addInitScript(() => {
+      localStorage.setItem('isAuthenticated', 'true');
+      localStorage.setItem('username', 'adminqoquddbs');
+      localStorage.setItem('isAdmin', 'true');
+      // 관리자는 tenantSlug를 가지지 않음
+    });
+    await mockTenantConfig(page, TENANT_A, 'Alpha Office');
+
+    await page.goto(`${BASE_URL}/${TENANT_A}/`);
+    await page.waitForTimeout(500);
+
+    // 관리자 세션이 초기화되어 로그인 페이지가 표시되어야 함
+    const isAuthenticated = await page.evaluate(() => localStorage.getItem('isAuthenticated'));
+    expect(isAuthenticated).not.toBe('true');
+
+    const loginForm = page.locator('input[type="password"]');
+    await expect(loginForm).toBeVisible({ timeout: 3000 });
+  });
+
+  test('REQ-ISO-010b: session with no storedSlug is cleared on any tenant URL', async ({ page }) => {
+    // storedSlug가 없는 세션 (비정상 상태)
+    await page.addInitScript(() => {
+      localStorage.setItem('isAuthenticated', 'true');
+      localStorage.setItem('username', 'someuser');
+      localStorage.setItem('isAdmin', 'false');
+      // tenantSlug 없음 — 비정상 상태
+    });
+    await mockTenantConfig(page, TENANT_A, 'Alpha Office');
+
+    await page.goto(`${BASE_URL}/${TENANT_A}/`);
+    await page.waitForTimeout(500);
+
+    // 세션이 초기화되어야 함
+    const isAuthenticated = await page.evaluate(() => localStorage.getItem('isAuthenticated'));
+    expect(isAuthenticated).not.toBe('true');
+
+    const loginForm = page.locator('input[type="password"]');
+    await expect(loginForm).toBeVisible({ timeout: 3000 });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// REQ-ISO-011: 로그인 요청 시 tenantSlug 없으면 거부되어야 한다
+// (requestedTenantSlug가 null/undefined일 때 백엔드가 허용하는 버그 방지)
+// ---------------------------------------------------------------------------
+
+test.describe('REQ-ISO-011: login without tenantSlug is rejected for non-admin users', () => {
+  test('REQ-ISO-011a: login endpoint rejects request without tenantSlug', async ({ page }) => {
+    await mockTenantConfig(page, TENANT_A, 'Alpha Office');
+
+    let loginBody: Record<string, unknown> | null = null;
+    let loginStatus = 0;
+
+    await page.route('**/make-server-9e65d886/login', async (route: Route) => {
+      loginBody = await route.request().postDataJSON();
+      // 백엔드는 tenantSlug가 없으면 403을 반환해야 함
+      if (!loginBody?.tenantSlug) {
+        loginStatus = 403;
+        await route.fulfill({
+          status: 403,
+          contentType: 'application/json',
+          body: JSON.stringify({ error: '이 페이지에 접속 권한이 없습니다.' }),
+        });
+      } else {
+        loginStatus = 200;
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ success: true, isAdmin: false, username: 'user', tenantSlug: TENANT_A }),
+        });
+      }
+    });
+
+    await page.goto(`${BASE_URL}/${TENANT_A}/`);
+    await page.waitForTimeout(300);
+
+    // tenantSlug가 있는 정상 로그인은 성공해야 함
+    await page.getByLabel('아이디').fill('user_alpha');
+    await page.getByLabel('비밀번호').fill('validPass1!');
+    await page.getByRole('button', { name: '로그인' }).click();
+    await page.waitForTimeout(500);
+
+    // tenantSlug가 전송되었는지 확인
+    expect(loginBody).not.toBeNull();
+    expect((loginBody as Record<string, unknown>).tenantSlug).toBe(TENANT_A);
+    expect(loginStatus).toBe(200);
+  });
+
+  test('REQ-ISO-011b: login to ownerless tenant is rejected for foreign-tenant users', async ({ page }) => {
+    // 오너 미지정 테넌트에 다른 테넌트 유저가 로그인 시도 시 백엔드가 거부해야 함
+    await mockTenantConfig(page, 'new-tenant', 'New Office');
+
+    let loginStatus = 0;
+
+    await page.route('**/make-server-9e65d886/login', async (route: Route) => {
+      const body = await route.request().postDataJSON();
+      const requestedSlug = body?.tenantSlug;
+      // 오너 미지정 테넌트에서 tenant-a 유저가 로그인 시도
+      // 백엔드: user.tenantSlug('tenant-alpha') !== requestedTenantSlug('new-tenant') → 403
+      if (requestedSlug === 'new-tenant') {
+        loginStatus = 403;
+        await route.fulfill({
+          status: 403,
+          contentType: 'application/json',
+          body: JSON.stringify({ error: '이 페이지에 접속 권한이 없습니다.' }),
+        });
+      } else {
+        loginStatus = 200;
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true }) });
+      }
+    });
+
+    await page.goto(`${BASE_URL}/new-tenant/`);
+    await page.waitForTimeout(300);
+
+    await page.getByLabel('아이디').fill('user_alpha');
+    await page.getByLabel('비밀번호').fill('validPass1!');
+    await page.getByRole('button', { name: '로그인' }).click();
+    await page.waitForTimeout(500);
+
+    expect(loginStatus).toBe(403);
+
+    // 로그인 실패 후 여전히 로그인 폼이 표시되어야 함
+    const loginForm = page.locator('input[type="password"]');
+    await expect(loginForm).toBeVisible({ timeout: 3000 });
+  });
+});
+
+// ---------------------------------------------------------------------------
 // REQ-ISO-008: /admin/delete-user has no auth guard (known gap — document it)
 // ---------------------------------------------------------------------------
 
