@@ -5,6 +5,7 @@ import { Badge } from '../components/ui/badge';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Building2, Users, Trash2, Plus, LogOut, Eye, EyeOff } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { toast } from 'sonner';
 import { projectId, publicAnonKey } from '/utils/supabase/info';
 
@@ -437,6 +438,8 @@ function TenantRow({ tenant, formatDate, onDeleted }: TenantRowProps) {
   const [isMigrating, setIsMigrating] = useState(false);
   const [isAssigningOwner, setIsAssigningOwner] = useState(false);
   const [assignOwnerUsername, setAssignOwnerUsername] = useState('');
+  const [unassignedUsers, setUnassignedUsers] = useState<{ username: string; email: string }[]>([]);
+  const [isLoadingUsers, setIsLoadingUsers] = useState(false);
   // 'idle' | 'confirm-migrate' | 'confirm-delete' | 'assign-owner'
   const [confirmState, setConfirmState] = useState<'idle' | 'confirm-migrate' | 'confirm-delete' | 'assign-owner'>('idle');
 
@@ -552,7 +555,22 @@ function TenantRow({ tenant, formatDate, onDeleted }: TenantRowProps) {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setConfirmState('assign-owner')}
+                onClick={async () => {
+                  setIsLoadingUsers(true);
+                  setAssignOwnerUsername('');
+                  setConfirmState('assign-owner');
+                  try {
+                    const res = await fetch(`${API_BASE_URL}/admin/users/unassigned`, {
+                      headers: getSuperAdminHeaders(),
+                    });
+                    const data = await res.json();
+                    setUnassignedUsers(data.users ?? []);
+                  } catch {
+                    setUnassignedUsers([]);
+                  } finally {
+                    setIsLoadingUsers(false);
+                  }
+                }}
                 disabled={isAssigningOwner || confirmState !== 'idle'}
                 className="text-xs h-8 border-amber-400 text-amber-700 hover:bg-amber-50"
               >
@@ -587,23 +605,42 @@ function TenantRow({ tenant, formatDate, onDeleted }: TenantRowProps) {
             <div className="flex items-center justify-between gap-4 text-sm">
               <div className="flex items-center gap-3 flex-1">
                 <span className="text-amber-800 dark:text-amber-300 shrink-0">
-                  오너로 지정할 아이디:
+                  오너로 지정할 계정:
                 </span>
-                <Input
+                <Select
                   value={assignOwnerUsername}
-                  onChange={(e) => setAssignOwnerUsername(e.target.value)}
-                  placeholder="username"
-                  className="h-7 text-xs max-w-48"
-                  onKeyDown={(e) => e.key === 'Enter' && executeAssignOwner()}
-                  autoFocus
-                />
+                  onValueChange={setAssignOwnerUsername}
+                  disabled={isLoadingUsers}
+                >
+                  <SelectTrigger className="h-7 text-xs max-w-64">
+                    <SelectValue placeholder={
+                      isLoadingUsers
+                        ? '불러오는 중...'
+                        : unassignedUsers.length === 0
+                          ? '미배정 유저 없음'
+                          : '계정 선택'
+                    } />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {unassignedUsers.length === 0 ? (
+                      <SelectItem value="__none__" disabled>미배정 유저 없음</SelectItem>
+                    ) : (
+                      unassignedUsers.map((u) => (
+                        <SelectItem key={u.username} value={u.username}>
+                          {u.username}
+                          {u.email && <span className="text-muted-foreground ml-1">({u.email})</span>}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="flex gap-2 shrink-0">
                 <Button
                   size="sm"
                   className="h-7 text-xs"
                   onClick={executeAssignOwner}
-                  disabled={!assignOwnerUsername.trim()}
+                  disabled={!assignOwnerUsername || assignOwnerUsername === '__none__'}
                 >
                   확인
                 </Button>
@@ -611,7 +648,7 @@ function TenantRow({ tenant, formatDate, onDeleted }: TenantRowProps) {
                   size="sm"
                   variant="ghost"
                   className="h-7 text-xs"
-                  onClick={() => { setConfirmState('idle'); setAssignOwnerUsername(''); }}
+                  onClick={() => { setConfirmState('idle'); setAssignOwnerUsername(''); setUnassignedUsers([]); }}
                 >
                   취소
                 </Button>

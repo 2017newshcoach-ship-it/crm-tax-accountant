@@ -879,6 +879,24 @@ app.get("/make-server-9e65d886/admin/users", async (c) => {
   }
 });
 
+// GET /make-server-9e65d886/admin/users/unassigned
+// Super admin only. Returns users with no tenantSlug (legacy users not yet linked to a tenant).
+app.get("/make-server-9e65d886/admin/users/unassigned", async (c) => {
+  try {
+    if (!isSuperAdmin(c)) {
+      return c.json({ error: "Forbidden - Super admin access required" }, 403);
+    }
+    const users = await kv.getByPrefix("user:");
+    const unassigned = users
+      .filter((u: any) => !u.isAdmin && !u.tenantSlug)
+      .map((u: any) => ({ username: u.username, email: u.email, createdAt: u.createdAt }));
+    return c.json({ users: unassigned });
+  } catch (error) {
+    console.error("[UNASSIGNED USERS] Error:", error);
+    return c.json({ error: "Failed to fetch unassigned users" }, 500);
+  }
+});
+
 // Delete user (admin only)
 app.delete("/make-server-9e65d886/admin/delete-user", async (c) => {
   try {
