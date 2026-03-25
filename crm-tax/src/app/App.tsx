@@ -84,7 +84,26 @@ export default function App() {
 function AppInner() {
   const [authView, setAuthView] = useState<AuthView>('login');
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
-    return localStorage.getItem('isAuthenticated') === 'true';
+    const auth = localStorage.getItem('isAuthenticated') === 'true';
+    if (!auth) return false;
+
+    // 현재 URL의 테넌트가 로그인한 테넌트와 다르면 세션 초기화
+    // (다른 테넌트 URL로 이동 시 자동 로그인 방지)
+    const match = window.location.pathname.match(/^\/([a-z0-9-]+)(\/|$)/);
+    const urlSlug = match ? match[1] : null;
+    const storedSlug = localStorage.getItem('tenantSlug');
+    const ignoredSlugs = new Set(['admin']);
+
+    // 테넌트 URL 접근 시: storedSlug가 없거나 URL과 다르면 세션 초기화
+    // (관리자 계정도 tenantSlug가 없으므로, 테넌트 URL에서는 세션 무효화)
+    if (urlSlug && !ignoredSlugs.has(urlSlug) && (!storedSlug || urlSlug !== storedSlug)) {
+      localStorage.removeItem('isAuthenticated');
+      localStorage.removeItem('username');
+      localStorage.removeItem('isAdmin');
+      return false;
+    }
+
+    return auth;
   });
   const [isAdmin, setIsAdmin] = useState(() => {
     return localStorage.getItem('isAdmin') === 'true';
