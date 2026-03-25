@@ -51,24 +51,35 @@ export function TenantProvider({ children }: TenantProviderProps) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const slug =
-      extractSlugFromPath(window.location.pathname) ??
-      localStorage.getItem('tenantSlug');
+    const urlSlug = extractSlugFromPath(window.location.pathname);
+    const storedSlug = localStorage.getItem('tenantSlug');
+    const isAuthenticated = localStorage.getItem('isAuthenticated') === 'true';
+
+    // 인증 상태에서는 로그인 시 서버가 지정한 tenantSlug를 신뢰 (URL로 덮어쓰지 않음)
+    // 비인증 상태에서는 URL 경로를 우선 사용 (로그인 페이지 브랜딩용)
+    const slug = isAuthenticated
+      ? (storedSlug ?? urlSlug)
+      : (urlSlug ?? storedSlug);
 
     if (!slug) {
       setIsLoading(false);
       return;
     }
 
-    localStorage.setItem('tenantSlug', slug);
+    // 비인증 상태일 때만 localStorage 업데이트 (로그인 후에는 Login.tsx가 담당)
+    if (!isAuthenticated && urlSlug) {
+      localStorage.setItem('tenantSlug', urlSlug);
+    }
     setTenantSlug(slug);
 
+    // 브랜딩은 URL 슬러그 기준으로 로드 (로그인 페이지에서 올바른 브랜딩 표시)
+    const brandingSlug = urlSlug ?? slug;
     const loadTenantConfig = async () => {
       try {
         setIsLoading(true);
         setError(null);
 
-        const response = await fetch(`${API_BASE_URL}/tenant/${slug}/config`, {
+        const response = await fetch(`${API_BASE_URL}/tenant/${brandingSlug}/config`, {
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${publicAnonKey}`,

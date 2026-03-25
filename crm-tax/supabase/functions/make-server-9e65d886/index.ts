@@ -149,13 +149,33 @@ function getUsernameFromAuth(c: any): string | null {
   return authHeader || null;
 }
 
+/**
+ * Verifies the authenticated user actually belongs to the tenant in X-Tenant-ID.
+ * Returns the username if valid, null if unauthorized.
+ * Super admins and platform admins bypass this check.
+ */
+async function verifyTenantAccess(c: any): Promise<string | null> {
+  const username = getUsernameFromAuth(c);
+  const requestedTenantSlug = getTenantSlug(c);
+  if (!username || !requestedTenantSlug) return null;
+  if (isSuperAdmin(c)) return username;
+  const user = await kv.get(`user:${username}`);
+  if (!user) return null;
+  if (user.isAdmin) return username;
+  if (user.tenantSlug !== requestedTenantSlug) {
+    console.warn(`[AUTH] Tenant mismatch: user="${username}" belongs="${user.tenantSlug}" requested="${requestedTenantSlug}"`);
+    return null;
+  }
+  return username;
+}
+
 // Get all clients
 app.get("/make-server-9e65d886/clients", async (c) => {
   try {
-    const userId = getUsernameFromAuth(c);
     const tenantSlug = getTenantSlug(c);
+    const userId = await verifyTenantAccess(c);
     if (!userId || !tenantSlug) {
-      return c.json({ error: "Unauthorized - User ID and Tenant ID required" }, 401);
+      return c.json({ error: "Forbidden - Tenant access denied" }, 403);
     }
 
     const clients = await kv.getByPrefix(`client:${tenantSlug}:`);
@@ -169,10 +189,10 @@ app.get("/make-server-9e65d886/clients", async (c) => {
 // Get a single client
 app.get("/make-server-9e65d886/clients/:id", async (c) => {
   try {
-    const userId = getUsernameFromAuth(c);
     const tenantSlug = getTenantSlug(c);
+    const userId = await verifyTenantAccess(c);
     if (!userId || !tenantSlug) {
-      return c.json({ error: "Unauthorized - User ID and Tenant ID required" }, 401);
+      return c.json({ error: "Forbidden - Tenant access denied" }, 403);
     }
 
     const id = c.req.param("id");
@@ -192,10 +212,10 @@ app.get("/make-server-9e65d886/clients/:id", async (c) => {
 // Create a new client
 app.post("/make-server-9e65d886/clients", async (c) => {
   try {
-    const userId = getUsernameFromAuth(c);
     const tenantSlug = getTenantSlug(c);
+    const userId = await verifyTenantAccess(c);
     if (!userId || !tenantSlug) {
-      return c.json({ error: "Unauthorized - User ID and Tenant ID required" }, 401);
+      return c.json({ error: "Forbidden - Tenant access denied" }, 403);
     }
 
     const body = await c.req.json();
@@ -233,10 +253,10 @@ app.post("/make-server-9e65d886/clients", async (c) => {
 // Update a client
 app.put("/make-server-9e65d886/clients/:id", async (c) => {
   try {
-    const userId = getUsernameFromAuth(c);
     const tenantSlug = getTenantSlug(c);
+    const userId = await verifyTenantAccess(c);
     if (!userId || !tenantSlug) {
-      return c.json({ error: "Unauthorized - User ID and Tenant ID required" }, 401);
+      return c.json({ error: "Forbidden - Tenant access denied" }, 403);
     }
 
     const id = c.req.param("id");
@@ -275,10 +295,10 @@ app.put("/make-server-9e65d886/clients/:id", async (c) => {
 // Delete a client
 app.delete("/make-server-9e65d886/clients/:id", async (c) => {
   try {
-    const userId = getUsernameFromAuth(c);
     const tenantSlug = getTenantSlug(c);
+    const userId = await verifyTenantAccess(c);
     if (!userId || !tenantSlug) {
-      return c.json({ error: "Unauthorized - User ID and Tenant ID required" }, 401);
+      return c.json({ error: "Forbidden - Tenant access denied" }, 403);
     }
 
     const id = c.req.param("id");
@@ -309,10 +329,10 @@ app.delete("/make-server-9e65d886/clients/:id", async (c) => {
 // Get all consultations for a client
 app.get("/make-server-9e65d886/clients/:clientId/consultations", async (c) => {
   try {
-    const userId = getUsernameFromAuth(c);
     const tenantSlug = getTenantSlug(c);
+    const userId = await verifyTenantAccess(c);
     if (!userId || !tenantSlug) {
-      return c.json({ error: "Unauthorized - User ID and Tenant ID required" }, 401);
+      return c.json({ error: "Forbidden - Tenant access denied" }, 403);
     }
 
     const clientId = c.req.param("clientId");
@@ -327,10 +347,10 @@ app.get("/make-server-9e65d886/clients/:clientId/consultations", async (c) => {
 // Get all consultations (for all clients)
 app.get("/make-server-9e65d886/consultations", async (c) => {
   try {
-    const userId = getUsernameFromAuth(c);
     const tenantSlug = getTenantSlug(c);
+    const userId = await verifyTenantAccess(c);
     if (!userId || !tenantSlug) {
-      return c.json({ error: "Unauthorized - User ID and Tenant ID required" }, 401);
+      return c.json({ error: "Forbidden - Tenant access denied" }, 403);
     }
 
     const consultations = await kv.getByPrefix(`consultation:${tenantSlug}:`);
@@ -344,10 +364,10 @@ app.get("/make-server-9e65d886/consultations", async (c) => {
 // Create a new consultation
 app.post("/make-server-9e65d886/clients/:clientId/consultations", async (c) => {
   try {
-    const userId = getUsernameFromAuth(c);
     const tenantSlug = getTenantSlug(c);
+    const userId = await verifyTenantAccess(c);
     if (!userId || !tenantSlug) {
-      return c.json({ error: "Unauthorized - User ID and Tenant ID required" }, 401);
+      return c.json({ error: "Forbidden - Tenant access denied" }, 403);
     }
 
     const clientId = c.req.param("clientId");
@@ -392,10 +412,10 @@ app.post("/make-server-9e65d886/clients/:clientId/consultations", async (c) => {
 // Update a consultation
 app.put("/make-server-9e65d886/clients/:clientId/consultations/:id", async (c) => {
   try {
-    const userId = getUsernameFromAuth(c);
     const tenantSlug = getTenantSlug(c);
+    const userId = await verifyTenantAccess(c);
     if (!userId || !tenantSlug) {
-      return c.json({ error: "Unauthorized - User ID and Tenant ID required" }, 401);
+      return c.json({ error: "Forbidden - Tenant access denied" }, 403);
     }
 
     const clientId = c.req.param("clientId");
@@ -456,10 +476,10 @@ app.put("/make-server-9e65d886/clients/:clientId/consultations/:id", async (c) =
 // Toggle important status for a consultation
 app.patch("/make-server-9e65d886/clients/:clientId/consultations/:id/important", async (c) => {
   try {
-    const userId = getUsernameFromAuth(c);
     const tenantSlug = getTenantSlug(c);
+    const userId = await verifyTenantAccess(c);
     if (!userId || !tenantSlug) {
-      return c.json({ error: "Unauthorized - User ID and Tenant ID required" }, 401);
+      return c.json({ error: "Forbidden - Tenant access denied" }, 403);
     }
 
     const clientId = c.req.param("clientId");
@@ -487,10 +507,10 @@ app.patch("/make-server-9e65d886/clients/:clientId/consultations/:id/important",
 // Delete a consultation
 app.delete("/make-server-9e65d886/clients/:clientId/consultations/:id", async (c) => {
   try {
-    const userId = getUsernameFromAuth(c);
     const tenantSlug = getTenantSlug(c);
+    const userId = await verifyTenantAccess(c);
     if (!userId || !tenantSlug) {
-      return c.json({ error: "Unauthorized - User ID and Tenant ID required" }, 401);
+      return c.json({ error: "Forbidden - Tenant access denied" }, 403);
     }
 
     const clientId = c.req.param("clientId");
@@ -631,8 +651,9 @@ app.post("/make-server-9e65d886/login", async (c) => {
 
     // Tenant isolation: non-admin users can only login to their own tenant
     if (!user.isAdmin && requestedTenantSlug) {
-      if (user.tenantSlug && user.tenantSlug !== requestedTenantSlug) {
-        console.log(`[LOGIN] Tenant mismatch: user="${user.tenantSlug}" requested="${requestedTenantSlug}"`);
+      // user.tenantSlug가 null이거나 요청 테넌트와 다르면 거부
+      if (!user.tenantSlug || user.tenantSlug !== requestedTenantSlug) {
+        console.log(`[LOGIN] Tenant mismatch or unassigned: user="${user.tenantSlug}" requested="${requestedTenantSlug}"`);
         return c.json({ error: "이 페이지에 접속 권한이 없습니다." }, 403);
       }
     }
@@ -860,18 +881,23 @@ app.post("/make-server-9e65d886/reset-password", async (c) => {
   }
 });
 
-// Get all users (admin only)
+// Get all users (super admin only)
 app.get("/make-server-9e65d886/admin/users", async (c) => {
   try {
+    if (!isSuperAdmin(c)) {
+      return c.json({ error: "Forbidden - Super admin access required" }, 403);
+    }
     const users = await kv.getByPrefix("user:");
-    
+
     // Remove passwords from response
     const sanitizedUsers = users.map((user: any) => ({
       username: user.username,
       email: user.email,
+      tenantSlug: user.tenantSlug || null,
+      isAdmin: user.isAdmin || false,
       createdAt: user.createdAt,
     }));
-    
+
     return c.json({ users: sanitizedUsers || [] });
   } catch (error) {
     console.error("Error fetching users:", error);
@@ -897,9 +923,12 @@ app.get("/make-server-9e65d886/admin/users/unassigned", async (c) => {
   }
 });
 
-// Delete user (admin only)
+// Delete user (super admin only)
 app.delete("/make-server-9e65d886/admin/delete-user", async (c) => {
   try {
+    if (!isSuperAdmin(c)) {
+      return c.json({ error: "Forbidden - Super admin access required" }, 403);
+    }
     const body = await c.req.json();
     const { username } = body;
 
@@ -934,10 +963,10 @@ app.delete("/make-server-9e65d886/admin/delete-user", async (c) => {
 // Upload attachment to consultation
 app.post("/make-server-9e65d886/clients/:clientId/consultations/:consultationId/attachments", async (c) => {
   try {
-    const userId = getUsernameFromAuth(c);
     const tenantSlug = getTenantSlug(c);
+    const userId = await verifyTenantAccess(c);
     if (!userId || !tenantSlug) {
-      return c.json({ error: "Unauthorized - User ID and Tenant ID required" }, 401);
+      return c.json({ error: "Forbidden - Tenant access denied" }, 403);
     }
 
     const clientId = c.req.param("clientId");
@@ -1005,10 +1034,10 @@ app.post("/make-server-9e65d886/clients/:clientId/consultations/:consultationId/
 // Delete attachment
 app.delete("/make-server-9e65d886/clients/:clientId/consultations/:consultationId/attachments/:attachmentId", async (c) => {
   try {
-    const userId = getUsernameFromAuth(c);
     const tenantSlug = getTenantSlug(c);
+    const userId = await verifyTenantAccess(c);
     if (!userId || !tenantSlug) {
-      return c.json({ error: "Unauthorized - User ID and Tenant ID required" }, 401);
+      return c.json({ error: "Forbidden - Tenant access denied" }, 403);
     }
 
     const clientId = c.req.param("clientId");
