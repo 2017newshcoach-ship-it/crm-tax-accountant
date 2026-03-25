@@ -560,6 +560,23 @@ function AppInner() {
     }
   };
 
+  const handleDeleteConsultationFromCalendar = async (consultationId: string) => {
+    const consultation = consultations.find((c) => c.id === consultationId);
+    if (!consultation) return;
+    try {
+      const response = await fetchWithAuth(
+        `${API_BASE_URL}/clients/${consultation.clientId}/consultations/${consultationId}`,
+        { method: 'DELETE' }
+      );
+      if (!response.ok) throw new Error('Failed to delete consultation');
+      setConsultations((prev) => prev.filter((c) => c.id !== consultationId));
+      toast.success('상담이 삭제됐습니다.');
+    } catch (error) {
+      console.error('Error deleting consultation:', error);
+      toast.error('상담 삭제에 실패했습니다.');
+    }
+  };
+
   const handleToggleImportant = async (consultationId: string) => {
     if (view.type !== 'detail') return;
 
@@ -769,6 +786,7 @@ function AppInner() {
             onCreateConsultation={handleCreateConsultation}
             onUpdateConsultation={handleUpdateConsultation}
             onCancelAppointment={handleCancelAppointment}
+            onDeleteConsultation={handleDeleteConsultationFromCalendar}
             onNewClient={() => setView({ type: 'newClient' })}
           />
         );
