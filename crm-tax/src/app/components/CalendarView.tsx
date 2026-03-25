@@ -57,6 +57,7 @@ interface CalendarViewProps {
     attachments?: any[];
   }) => Promise<boolean | void>;
   onCancelAppointment?: (consultationId: string) => Promise<void>;
+  onDeleteConsultation?: (consultationId: string) => Promise<void>;
   onNewClient: () => void;
 }
 
@@ -68,6 +69,7 @@ export function CalendarView({
   onCreateConsultation,
   onUpdateConsultation,
   onCancelAppointment,
+  onDeleteConsultation,
   onNewClient,
 }: CalendarViewProps) {
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -128,10 +130,10 @@ export function CalendarView({
 
   // 예약/상담 삭제
   const handleDelete = async (consultation: Consultation) => {
-    if (!onCancelAppointment) return;
+    if (!onDeleteConsultation) return;
     setIsDeleting(true);
     try {
-      await onCancelAppointment(consultation.id);
+      await onDeleteConsultation(consultation.id);
       setDeleteConfirmId(null);
     } finally {
       setIsDeleting(false);
