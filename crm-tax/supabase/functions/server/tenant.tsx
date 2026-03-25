@@ -206,6 +206,52 @@ export function createTenantRouter(): Hono {
     }
   });
 
+  // POST /make-server-9e65d886/admin/tenants/:slug/assign-owner
+  // Super admin only. Assigns an existing user as tenant owner.
+  // Use when a legacy user (no tenantSlug) needs to be linked to an ownerless tenant.
+  router.post("/make-server-9e65d886/admin/tenants/:slug/assign-owner", async (c) => {
+    try {
+      if (!isSuperAdmin(c)) {
+        return c.json({ error: "Forbidden - Super admin access required" }, 403);
+      }
+
+      const slug = c.req.param("slug");
+      const body = await c.req.json();
+      const { username } = body;
+
+      if (!username) {
+        return c.json({ error: "username is required" }, 400);
+      }
+
+      const tenant = await kv.get(`tenant:${slug}`);
+      if (!tenant) {
+        return c.json({ error: "Tenant not found" }, 404);
+      }
+
+      if (tenant.ownerUsername) {
+        return c.json({ error: "이미 오너가 지정된 테넌트입니다" }, 409);
+      }
+
+      const user = await kv.get(`user:${username}`);
+      if (!user) {
+        return c.json({ error: "User not found" }, 404);
+      }
+
+      if (user.tenantSlug && user.tenantSlug !== slug) {
+        return c.json({ error: "이미 다른 테넌트에 속한 유저입니다" }, 409);
+      }
+
+      await kv.set(`user:${username}`, { ...user, tenantSlug: slug });
+      await kv.set(`tenant:${slug}`, { ...tenant, ownerUsername: username });
+
+      console.log(`[ASSIGN OWNER] tenant="${slug}" owner="${username}"`);
+      return c.json({ success: true, tenantSlug: slug, ownerUsername: username });
+    } catch (error) {
+      console.error("[ASSIGN OWNER] Error:", error);
+      return c.json({ error: "Failed to assign owner" }, 500);
+    }
+  });
+
   // DELETE /make-server-9e65d886/admin/tenants/:slug
   // Super admin only. Deletes a tenant and clears tenantSlug from associated users.
   router.delete("/make-server-9e65d886/admin/tenants/:slug", async (c) => {
@@ -260,14 +306,22 @@ export function createTenantRouter(): Hono {
         return c.json({ error: "Target tenant not found" }, 404);
       }
 
-      const results = {
+      const results: {
+        usersUpdated: number;
+        clientsCopied: number;
+        consultationsCopied: number;
+        ownerSet: string | null;
+        errors: string[];
+      } = {
         usersUpdated: 0,
         clientsCopied: 0,
         consultationsCopied: 0,
-        errors: [] as string[],
+        ownerSet: null,
+        errors: [],
       };
 
       // --- Migrate users: add tenantSlug field if missing ---
+      let firstMigratedUsername: string | null = null;
       const allUsers = await kv.getByPrefix("user:");
       for (const user of allUsers) {
         if (!user.isAdmin && !user.tenantSlug) {
@@ -275,9 +329,23 @@ export function createTenantRouter(): Hono {
             const updatedUser = { ...user, tenantSlug: targetTenantSlug };
             await kv.set(`user:${user.username}`, updatedUser);
             results.usersUpdated++;
+            if (!firstMigratedUsername) firstMigratedUsername = user.username;
           } catch (err) {
             results.errors.push(`user:${user.username} - ${err}`);
           }
+        }
+      }
+
+      // Auto-set ownerUsername if tenant has none and we migrated at least one user
+      if (!targetTenant.ownerUsername && firstMigratedUsername) {
+        try {
+          await kv.set(`tenant:${targetTenantSlug}`, {
+            ...targetTenant,
+            ownerUsername: firstMigratedUsername,
+          });
+          results.ownerSet = firstMigratedUsername;
+        } catch (err) {
+          results.errors.push(`ownerSet - ${err}`);
         }
       }
 

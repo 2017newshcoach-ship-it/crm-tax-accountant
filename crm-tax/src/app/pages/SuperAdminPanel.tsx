@@ -435,8 +435,10 @@ interface TenantRowProps {
 function TenantRow({ tenant, formatDate, onDeleted }: TenantRowProps) {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isMigrating, setIsMigrating] = useState(false);
-  // 'idle' | 'confirm-migrate' | 'confirm-delete'
-  const [confirmState, setConfirmState] = useState<'idle' | 'confirm-migrate' | 'confirm-delete'>('idle');
+  const [isAssigningOwner, setIsAssigningOwner] = useState(false);
+  const [assignOwnerUsername, setAssignOwnerUsername] = useState('');
+  // 'idle' | 'confirm-migrate' | 'confirm-delete' | 'assign-owner'
+  const [confirmState, setConfirmState] = useState<'idle' | 'confirm-migrate' | 'confirm-delete' | 'assign-owner'>('idle');
 
   const executeMigrate = async () => {
     setConfirmState('idle');
@@ -449,13 +451,37 @@ function TenantRow({ tenant, formatDate, onDeleted }: TenantRowProps) {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? '마이그레이션 실패');
+      const ownerMsg = data.ownerSet ? `, 오너: ${data.ownerSet}` : '';
       toast.success(
-        `마이그레이션 완료 — 유저 ${data.usersUpdated}명, 고객 ${data.clientsCopied}건, 상담 ${data.consultationsCopied}건`
+        `마이그레이션 완료 — 유저 ${data.usersUpdated}명, 고객 ${data.clientsCopied}건, 상담 ${data.consultationsCopied}건${ownerMsg}`
       );
+      onDeleted();
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : '마이그레이션 실패');
     } finally {
       setIsMigrating(false);
+    }
+  };
+
+  const executeAssignOwner = async () => {
+    if (!assignOwnerUsername.trim()) return;
+    setIsAssigningOwner(true);
+    setConfirmState('idle');
+    try {
+      const response = await fetch(`${API_BASE_URL}/admin/tenants/${tenant.slug}/assign-owner`, {
+        method: 'POST',
+        headers: getSuperAdminHeaders(),
+        body: JSON.stringify({ username: assignOwnerUsername.trim() }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? '오너 지정 실패');
+      toast.success(`오너 지정 완료 — "${assignOwnerUsername.trim()}" → "${tenant.name}"`);
+      setAssignOwnerUsername('');
+      onDeleted();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : '오너 지정 실패');
+    } finally {
+      setIsAssigningOwner(false);
     }
   };
 
@@ -507,7 +533,12 @@ function TenantRow({ tenant, formatDate, onDeleted }: TenantRowProps) {
           </button>
         </td>
         <td className="py-3 px-4 font-medium">{tenant.name}</td>
-        <td className="py-3 px-4 text-muted-foreground">{tenant.ownerUsername}</td>
+        <td className="py-3 px-4">
+          {tenant.ownerUsername
+            ? <span className="text-muted-foreground">{tenant.ownerUsername}</span>
+            : <Badge variant="destructive" className="text-xs">미지정</Badge>
+          }
+        </td>
         <td className="py-3 px-4">
           <div className="flex items-center gap-1.5 text-muted-foreground">
             <Users className="size-3.5" />
@@ -517,6 +548,17 @@ function TenantRow({ tenant, formatDate, onDeleted }: TenantRowProps) {
         <td className="py-3 px-4 text-muted-foreground">{formatDate(tenant.createdAt)}</td>
         <td className="py-3 px-4">
           <div className="flex items-center gap-2">
+            {!tenant.ownerUsername && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setConfirmState('assign-owner')}
+                disabled={isAssigningOwner || confirmState !== 'idle'}
+                className="text-xs h-8 border-amber-400 text-amber-700 hover:bg-amber-50"
+              >
+                {isAssigningOwner ? '지정 중...' : '오너 지정'}
+              </Button>
+            )}
             <Button
               variant="outline"
               size="sm"
@@ -539,6 +581,45 @@ function TenantRow({ tenant, formatDate, onDeleted }: TenantRowProps) {
           </div>
         </td>
       </tr>
+      {confirmState === 'assign-owner' && (
+        <tr className="bg-amber-50 dark:bg-amber-950/20 border-b">
+          <td colSpan={6} className="px-4 py-3">
+            <div className="flex items-center justify-between gap-4 text-sm">
+              <div className="flex items-center gap-3 flex-1">
+                <span className="text-amber-800 dark:text-amber-300 shrink-0">
+                  오너로 지정할 아이디:
+                </span>
+                <Input
+                  value={assignOwnerUsername}
+                  onChange={(e) => setAssignOwnerUsername(e.target.value)}
+                  placeholder="username"
+                  className="h-7 text-xs max-w-48"
+                  onKeyDown={(e) => e.key === 'Enter' && executeAssignOwner()}
+                  autoFocus
+                />
+              </div>
+              <div className="flex gap-2 shrink-0">
+                <Button
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={executeAssignOwner}
+                  disabled={!assignOwnerUsername.trim()}
+                >
+                  확인
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 text-xs"
+                  onClick={() => { setConfirmState('idle'); setAssignOwnerUsername(''); }}
+                >
+                  취소
+                </Button>
+              </div>
+            </div>
+          </td>
+        </tr>
+      )}
       {confirmState === 'confirm-migrate' && (
         <tr className="bg-amber-50 dark:bg-amber-950/20 border-b">
           <td colSpan={6} className="px-4 py-3">
